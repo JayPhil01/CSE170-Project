@@ -1,0 +1,8 @@
+﻿  main.cpp
+C:\Users\James\Downloads\PA1_support_code\PA2\BasicOpenGLProject\main.cpp(107,51): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\James\Downloads\PA1_support_code\PA2\BasicOpenGLProject\main.cpp(110,63): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\James\Downloads\PA1_support_code\PA2\BasicOpenGLProject\main.cpp(367,50): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
+  shader.cpp
+  shaderprogram.cpp
+  Generating Code...
+  BasicOpenGLProject.vcxproj -> C:\Users\James\Downloads\PA1_support_code\PA2\x64\Debug\OpenGLProject.exe
