@@ -1,8 +1,34 @@
 ﻿  main.cpp
-C:\Users\James\Downloads\PA1_support_code\PA2\BasicOpenGLProject\main.cpp(107,51): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
-C:\Users\James\Downloads\PA1_support_code\PA2\BasicOpenGLProject\main.cpp(110,63): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
-C:\Users\James\Downloads\PA1_support_code\PA2\BasicOpenGLProject\main.cpp(367,50): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(405,72): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(408,80): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(457,13): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(460,12): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(596,23): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(596,23): warning C4244:         with
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(596,23): warning C4244:         [
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(596,23): warning C4244:             T=float
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(596,23): warning C4244:         ]
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(597,23): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(597,23): warning C4244:         with
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(597,23): warning C4244:         [
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(597,23): warning C4244:             T=float
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(597,23): warning C4244:         ]
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(598,23): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(598,23): warning C4244:         with
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(598,23): warning C4244:         [
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(598,23): warning C4244:             T=float
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(598,23): warning C4244:         ]
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(660,38): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(755,37): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(984,54): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(990,52): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(998,37): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
   shader.cpp
   shaderprogram.cpp
   Generating Code...
-  BasicOpenGLProject.vcxproj -> C:\Users\James\Downloads\PA1_support_code\PA2\x64\Debug\OpenGLProject.exe
+main.obj : error LNK2019: unresolved external symbol glfwInit referenced in function main
+main.obj : error LNK2019: unresolved external symbol glfwTerminate referenced in function main
+main.obj : error LNK2019: unresolved external symbol glfwGetJoystickAxes referenced in function "void __cdecl GamepadInput(void)" (?GamepadInput@@YAXXZ)
+main.obj : error LNK2019: unresolved external symbol glfwGetGamepadState referenced in function "void __cdecl display_func(void)" (?display_func@@YAXXZ)
+main.obj : error LNK2019: unresolved external symbol glfwGetTime referenced in function "void __cdecl keyboard_func(unsigned char,int,int)" (?keyboard_func@@YAXEHH@Z)
+C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\x64\Debug\OpenGLProject.exe : fatal error LNK1120: 5 unresolved externals

@@ -7,6 +7,10 @@
 #include <glm/ext.hpp>
 #include <GLFW/glfw3.h>
 
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+
 #include <vector>
 #include <cmath>
 #include <iostream>
@@ -40,22 +44,28 @@ float major_r = 5.0f;
 float minor_r = 2.5f;
 float num_segments = 16.0f;
 GLuint IndexBufferID;
-GLuint textures[3];
+GLuint tex[3];
 GLuint skybox;
 int texture_selected = 0;
 
-glm::vec3 eye, up;
-glm::vec3 direction(0.0, 0.0, -1.0);
+glm::vec3 eye, up, direction;
 
-float yaw = 90.0;
-float pitch = 0.0;
+float yaw = 0.0;
+float pitch = 30.0;
 
 //Joystick parameters
 int axis_count;
 const float* axes;
+float left_joystick_x, left_joystick_z;
 GLFWgamepadstate state;
 
 glm::vec3 player_pos(0.0, 0.0, 0.0);
+glm::vec3 camera_direction_vector;
+glm::vec3 player_direction_vector;
+glm::vec3 difference;
+float player_yaw = 90.0;
+float goal_yaw = 90.0;
+float rotation_speed = 5.0f;
 
 /*=================================================================================================
 	SHADERS & TRANSFORMATIONS
@@ -68,6 +78,7 @@ ShaderProgram PerspectiveShader;
 glm::mat4 PerspProjectionMatrix( 1.0f );
 glm::mat4 PerspViewMatrix( 1.0f );
 glm::mat4 PerspModelMatrix( 1.0f );
+glm::mat4 PlayerModelMatrix(1.0f);
 glm::mat4 SkyboxViewMatrix(1.0f);
 
 float perspZoom = 1.0f, perspSensitivity = 0.35f;
@@ -78,6 +89,189 @@ float perspRotationX = 0.0f, perspRotationY = 0.0f;
 =================================================================================================*/
 
 GLuint loadSkybox(std::vector<const char*> faces);
+GLuint TextureFromFile(aiTexture *texture);
+
+/*=================================================================================================
+	CLASSES
+=================================================================================================*/
+struct Vertex {
+	glm::vec3 Position;
+	glm::vec3 Normal;
+	glm::vec2 TexCoords;
+};
+
+struct Texture {
+	GLuint id;
+	std::string type;
+};
+
+class Mesh {
+	public:
+		std::vector<Vertex>  vertices;
+		std::vector<GLuint>  indices;
+		std::vector<Texture> textures;
+		GLuint VAO;
+
+		Mesh(std::vector<Vertex> vertices, std::vector<GLuint> indices, std::vector<Texture> textures)
+		{
+			this->vertices = vertices;
+			this->indices = indices;
+			this->textures = textures;
+
+			setupMesh();
+		}
+		void Draw()
+		{
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, textures[0].id);
+
+			glBindVertexArray(VAO);
+			glDrawElements(GL_TRIANGLES, static_cast<GLuint>(indices.size()), GL_UNSIGNED_INT, 0);
+			glBindVertexArray(0);
+			glActiveTexture(GL_TEXTURE0);
+		}
+	private:
+		GLuint VBO, EBO;
+		void setupMesh()
+		{
+			glGenVertexArrays(1, &VAO);
+			glGenBuffers(1, &VBO);
+			glGenBuffers(1, &EBO);
+
+			glBindVertexArray(VAO);
+			glBindBuffer(GL_ARRAY_BUFFER, VBO);
+			glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), &vertices[0], GL_STATIC_DRAW);
+
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), &indices[0], GL_STATIC_DRAW);
+
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
+
+			glBindVertexArray(0);
+		}
+};
+
+class Model {
+	public:
+		Model(std::string path)
+		{
+			loadModel(path);
+		}
+		void Draw()
+		{
+			for (GLuint i = 0; i < meshes.size(); i++)
+				meshes[i].Draw();
+		}
+	private:
+		std::vector<Mesh> meshes;
+
+		void loadModel(std::string path)
+		{
+			Assimp::Importer importer;
+			const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate);
+			if (!scene)
+			{
+				std::cout << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
+				return;
+			}
+			processNode(scene->mRootNode, scene);
+		}
+		void processNode(aiNode *node, const aiScene *scene)
+		{
+			for (GLuint i = 0; i < node->mNumMeshes; i++)
+			{
+				aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+				meshes.push_back(processMesh(mesh, scene));
+			}
+			for (GLuint i = 0; i < node->mNumChildren; i++)
+			{
+				processNode(node->mChildren[i], scene);
+			}
+		}
+		Mesh processMesh(aiMesh* mesh, const aiScene* scene)
+		{
+			std::vector<Vertex> vertices;
+			std::vector<GLuint> indices;
+			std::vector<Texture> textures;
+
+			for (GLuint i = 0; i < mesh->mNumVertices; i++)
+			{
+				Vertex vertex;
+				glm::vec3 vector;
+
+				vector.x = mesh->mVertices[i].x;
+				vector.y = mesh->mVertices[i].y;
+				vector.z = mesh->mVertices[i].z;
+				vertex.Position = vector;
+
+				if (mesh->HasNormals())
+				{
+					vector.x = mesh->mNormals[i].x;
+					vector.y = mesh->mNormals[i].y;
+					vector.z = mesh->mNormals[i].z;
+					vertex.Normal = vector;
+				}
+
+				if (mesh->mTextureCoords[0])
+				{
+					glm::vec2 vec;
+					vec.x = mesh->mTextureCoords[0][i].x;
+					vec.y = mesh->mTextureCoords[0][i].y;
+					vertex.TexCoords = vec;
+				}
+				else
+					vertex.TexCoords = glm::vec2(0.0f, 0.0f);
+
+				vertices.push_back(vertex);
+			}
+
+			for (GLuint i = 0; i < mesh->mNumFaces; i++)
+			{
+				aiFace face = mesh->mFaces[i];
+
+				for (GLuint j = 0; j < face.mNumIndices; j++)
+					indices.push_back(face.mIndices[j]);
+			}
+			aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+			aiString str;
+			material->Get(AI_MATKEY_TEXTURE(aiTextureType_DIFFUSE, 0), str);
+			aiTexture *texture = scene->mTextures[atoi(str.C_Str())];
+			Texture tex;
+			tex.id = TextureFromFile(texture);
+			tex.type = "texture_diffuse";
+			textures.push_back(tex);
+
+			Mesh temp(vertices, indices, textures);
+			return temp;
+		}
+};
+
+GLuint TextureFromFile(aiTexture *texture)
+{
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	int width, height, nrChannels;
+	unsigned char* data = stbi_load("textures/player.png", &width, &height, &nrChannels, 0);
+	if (data)
+	{
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+		stbi_image_free(texture->pcData);
+	}
+
+	return textureID;
+}
 
 /*=================================================================================================
 	OBJECTS
@@ -157,15 +351,7 @@ std::vector<float> skyboxVertices = {
 	 1.0f, -1.0f,  1.0f
 };
 
-std::vector<float> torus_vertices;
-std::vector<float> torus_colors;
-std::vector<float> torus_textures;
-std::vector<int> torus_indices;
-
-std::vector<float> torus_normals;
-
-std::vector<float> normal_vertices;
-std::vector<float> normal_colors;
+Model *player;
 
 /*=================================================================================================
 	HELPER FUNCTIONS
@@ -175,90 +361,6 @@ void window_to_scene( int wx, int wy, float& sx, float& sy )
 {
 	sx = ( 2.0f * (float)wx / WindowWidth ) - 1.0f;
 	sy = 1.0f - ( 2.0f * (float)wy / WindowHeight );
-}
-
-void CreateTorusSmooth(float major, float minor, int num)
-{
-	float x, y, z, nx, ny, nz;
-	float u = 0.0f;
-	float v = 0.0f;
-	glm::vec3 normal_vector;
-	//Main segment
-	for (float phi = 0; phi <= (2.0f * M_PI) + 0.01f; phi += (2.0f * M_PI)/num)
-	{
-		//Tube segment
-		for (float theta = 0; theta <= (2.0f * M_PI) + 0.01f; theta += (2.0f * M_PI) / num)
-		{
-			x = (major + minor * cos(theta)) * cos(phi);
-			y = (major + minor * cos(theta)) * sin(phi);
-			z = minor * sin(theta);
-
-			torus_vertices.push_back(x);
-			torus_vertices.push_back(y);
-			torus_vertices.push_back(z);
-			torus_vertices.push_back(1.0f);
-
-			torus_colors.push_back(1.0f);
-			torus_colors.push_back(1.0f);
-			torus_colors.push_back(1.0f);
-			torus_colors.push_back(1.0f);
-
-			nx = cos(phi) * cos(theta);
-			ny = sin(phi) * cos(theta);
-			nz = sin(theta);
-
-			normal_vector = { nx, ny, nz };
-			normalize(normal_vector);
-
-			torus_normals.push_back(normal_vector[0]);
-			torus_normals.push_back(normal_vector[1]);
-			torus_normals.push_back(normal_vector[2]);
-			torus_normals.push_back(1.0f);
-
-			normal_vertices.push_back(x);
-			normal_vertices.push_back(y);
-			normal_vertices.push_back(z);
-			normal_vertices.push_back(1.0f);
-			normal_vertices.push_back(x + normal_vector[0]);
-			normal_vertices.push_back(y + normal_vector[1]);
-			normal_vertices.push_back(z + normal_vector[2]);
-			normal_vertices.push_back(1.0f);
-
-			normal_colors.push_back(1.0f);
-			normal_colors.push_back(0.0f);
-			normal_colors.push_back(0.0f);
-			normal_colors.push_back(1.0f);
-			normal_colors.push_back(1.0f);
-			normal_colors.push_back(0.0f);
-			normal_colors.push_back(0.0f);
-			normal_colors.push_back(1.0f);
-
-			torus_textures.push_back(u);
-			torus_textures.push_back(v);
-
-			v += 1.0 / num;
-		}
-		v = 0;
-		u += 1.0 / num;
-	}
-
-	int vertex_index = 0;
-
-	for (int i = 0; i < num; i++)
-	{
-		for (int j = 0; j < num + 1; j++)
-		{
-			torus_indices.push_back(vertex_index);
-			torus_indices.push_back(vertex_index + num + 1);
-
-			vertex_index++;
-		}
-		//Does not push the restart index if the end of the torus has been reached
-		if (i != num - 1)
-		{
-			torus_indices.push_back(99999);
-		}
-	}
 }
 
 void CreateTextures(void)
@@ -272,62 +374,6 @@ void CreateTextures(void)
 		"./textures/city_skybox_front.png",
 		"./textures/city_skybox_back.png"
 	};
-
-	glGenTextures(3, textures);
-
-	glBindTexture(GL_TEXTURE_2D, textures[0]);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	int width, height, nrChannels;
-	unsigned char* data = stbi_load("./textures/stripes.jpg", &width, &height, &nrChannels, 0);
-	if (data)
-	{
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-		glGenerateMipmap(GL_TEXTURE_2D);
-	}
-	else
-	{
-		std::cout << "Failed to load texture" << std::endl;
-	}
-	stbi_image_free(data);
-
-	glBindTexture(GL_TEXTURE_2D, textures[1]);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	data = stbi_load("./textures/cobblestone.jpg", &width, &height, &nrChannels, 0);
-	if (data)
-	{
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-		glGenerateMipmap(GL_TEXTURE_2D);
-	}
-	else
-	{
-		std::cout << "Failed to load texture" << std::endl;
-	}
-
-	stbi_image_free(data);
-
-	glBindTexture(GL_TEXTURE_2D, textures[2]);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	data = stbi_load("./textures/rainbow.jpg", &width, &height, &nrChannels, 0);
-	if (data)
-	{
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-		glGenerateMipmap(GL_TEXTURE_2D);
-	}
-	else
-	{
-		std::cout << "Failed to load texture" << std::endl;
-	}
-
-	stbi_image_free(data);
 
 	skybox = loadSkybox(faces);
 }
@@ -373,10 +419,11 @@ void CreateTransformationMatrices( void )
 	PerspProjectionMatrix = glm::perspective<float>( glm::radians( 60.0f ), (float)WindowWidth / (float)WindowHeight, 0.01f, 1000.0f );
 
 	// VIEW MATRIX
-	glm::vec3 player_center(player_pos.x, player_pos.y, player_pos.z);
-	eye.x = player_pos.x + (40.0 * cos(glm::radians(yaw)) * cos(glm::radians(pitch)));
-	eye.y = player_pos.y + (40.0 * sin(glm::radians(pitch)));
-	eye.z = player_pos.z + (40.0 * sin(glm::radians(yaw)) * cos(glm::radians(pitch)));
+	glm::vec3 player_center(player_pos.x, player_pos.y + 10.0f, player_pos.z);
+	direction = glm::vec3(cos(glm::radians(yaw)) * cos(glm::radians(pitch)), sin(glm::radians(pitch)), sin(glm::radians(yaw)) * cos(glm::radians(pitch)));
+	eye.x = player_pos.x + ((10.0 + 1.5*pitch) * direction.x);
+	eye.y = player_pos.y + ((10.0 + 1.5*pitch) * direction.y);
+	eye.z = player_pos.z + ((10.0 + 1.5*pitch) * direction.z);
 	up = glm::vec3(0.0, 1.0, 0.0);
 
 	PerspViewMatrix = glm::lookAt(eye, player_center, up);
@@ -400,24 +447,6 @@ void CreateShaders( void )
 /*=================================================================================================
 	BUFFERS
 =================================================================================================*/
-void CreateNormalBuffers(void)
-{
-	glGenVertexArrays(1, &normal_VAO);
-	glBindVertexArray(normal_VAO);
-
-	glGenBuffers(2, &normal_VBO[0]);
-
-	glBindBuffer(GL_ARRAY_BUFFER, normal_VBO[0]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(normal_vertices[0]) * normal_vertices.size(), &normal_vertices[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, normal_VBO[1]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(normal_colors[0]) * normal_colors.size(), &normal_colors[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(1);
-}
-
 void CreateFloorBuffers()
 {
 	glGenVertexArrays(1, &axis_VAO);
@@ -436,43 +465,6 @@ void CreateFloorBuffers()
 	glEnableVertexAttribArray(1);
 }
 
-void CreateTorusBuffers(void)
-{
-	CreateTorusSmooth(major_r, minor_r, num_segments);
-
-	glGenVertexArrays(1, &torus_VAO);
-	glBindVertexArray(torus_VAO);
-
-	glGenBuffers(4, &torus_VBO[0]);
-
-	glBindBuffer(GL_ARRAY_BUFFER, torus_VBO[0]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(torus_vertices[0]) * torus_vertices.size(), &torus_vertices[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, torus_VBO[1]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(torus_colors[0]) * torus_colors.size(), &torus_colors[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(1);
-
-	glBindBuffer(GL_ARRAY_BUFFER, torus_VBO[2]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(torus_normals[0]) * torus_normals.size(), &torus_normals[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(2);
-
-	glBindBuffer(GL_ARRAY_BUFFER, torus_VBO[3]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(torus_textures[0]) * torus_textures.size(), &torus_textures[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(3);
-
-	//Generates buffers for the indices of the torus
-	glGenBuffers(1, &IndexBufferID);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IndexBufferID);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(torus_indices[0]) * torus_indices.size(), &torus_indices[0], GL_STATIC_DRAW);
-
-	glBindVertexArray(0);
-}
-
 void CreateSkyboxBuffers()
 {
 	glGenVertexArrays(1, &skybox_VAO);
@@ -488,22 +480,6 @@ void CreateSkyboxBuffers()
 	glBindVertexArray(0);
 }
 
-//Clears torus values and calls to create a new torus with updated parameters
-void UpdateTorus(void)
-{
-	torus_vertices.clear();
-	torus_colors.clear();
-	torus_textures.clear();
-	torus_indices.clear();
-	torus_normals.clear();
-
-	normal_vertices.clear();
-	normal_colors.clear();
-
-	CreateTorusBuffers();
-	CreateNormalBuffers();
-}
-
 void Draw(GLuint VAO, int size, GLenum primitive)
 {
 	glBindVertexArray(VAO);
@@ -514,6 +490,9 @@ void Draw(GLuint VAO, int size, GLenum primitive)
 void GamepadInput()
 {
 	axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &axis_count);
+	camera_direction_vector = glm::normalize(glm::cross(glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw))), up));
+	player_direction_vector = glm::normalize(glm::cross(glm::vec3(cos(glm::radians(player_yaw - 90.0)), 0, sin(glm::radians(player_yaw - 90.0))), up));
+	difference = player_direction_vector - camera_direction_vector;
 
 	if (axes[2] > 0.1 || axes[2] < -0.1)
 		yaw += axes[2];
@@ -522,17 +501,33 @@ void GamepadInput()
 
 	if (pitch > 70.0)
 		pitch = 70.0;
-	if (pitch < 0.0)
-		pitch = 0.0;
+	if (pitch < 7.0)
+		pitch = 7.0;
 
-	if(axes[0] > 0.1 || axes[0] < -0.1)
-		player_pos.x += axes[0] / 10.0f;
-	if(axes[1] > 0.1 || axes[1] < -0.1)
-		player_pos.z += axes[1] / 10.0f;
+	if (axes[0] > 0.1 || axes[0] < -0.1)
+	{
+		player_pos -= axes[0] / 5.0f * camera_direction_vector;
+		player_yaw = yaw + 90.0;
+		/*if (sin(glm::radians(player_yaw - yaw)) > 0.0)
+			player_yaw += rotation_speed * axes[0];
+		else if (sin(glm::radians(player_yaw - yaw)) < 0.0)
+			player_yaw -= rotation_speed * axes[0];*/
+	}
+	if (axes[1] > 0.1 || axes[1] < -0.1)
+	{
+		player_pos += axes[1] / 5.0f * glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw)));
+		player_yaw = yaw + 90.0;
+		/*if (cos(glm::radians(player_yaw - yaw)) > 0.0)
+			player_yaw -= rotation_speed * axes[1];
+		else if (cos(glm::radians(player_yaw - yaw)) < 0.0)
+			player_yaw += rotation_speed * axes[1];*/
+	}
 
+	PerspModelMatrix = glm::translate(PerspModelMatrix, player_pos) * glm::rotate(PerspModelMatrix, glm::radians(-player_yaw), glm::vec3(0.0, 1.0, 0.0)) * glm::translate(PerspModelMatrix, -player_pos);
 	PerspModelMatrix = glm::translate(PerspModelMatrix, player_pos);
+	PerspModelMatrix = glm::scale(PerspModelMatrix, glm::vec3(4.0f, 4.0f, 4.0f));
 	PerspectiveShader.SetUniform("modelMatrix", glm::value_ptr(PerspModelMatrix), 4, GL_FALSE, 1);
-	Draw(axis_VAO, axis_vertices.size()/4, GL_QUADS);
+	player->Draw();
 }
 
 /*=================================================================================================
@@ -576,76 +571,43 @@ void keyboard_func( unsigned char key, int x, int y )
 			break;
 		}
 
-		case 'q':
-		{
-			num_segments++;
-			UpdateTorus();
-			break;
-		}
-
 		case 'a':
 		{
-			if (num_segments > 1)
-			{
-				num_segments--;
-				UpdateTorus();
-			}
+			yaw += 2.0;
 			break;
 		}
 
 		case 'w':
 		{
-			minor_r += 0.1f;
-			UpdateTorus();
+			if (pitch > 7.0)
+				pitch -= 2.0;
 			break;
 		}
 
 		case 's':
 		{
-			minor_r -= 0.1f;
-			UpdateTorus();
-			break;
-		}
-
-		case 'e':
-		{
-			major_r += 0.1f;
-			UpdateTorus();
+			if (pitch < 70.0)
+				pitch += 2.0;
 			break;
 		}
 
 		case 'd':
 		{
-			major_r -= 0.1f;
-			UpdateTorus();
-			break;
-		}
-
-		case 'c':
-		{
-			show_normals = !show_normals;
-			UpdateTorus();
+			yaw -= 2.0;
 			break;
 		}
 
 		case 't':
 		{
-			std::cout << yaw << ", " << pitch << std::endl;
+			std::cout << "Camera: " << camera_direction_vector.x << ", " << camera_direction_vector.z << std::endl;
+			std::cout << "Player: " << player_direction_vector.x << ", " << player_direction_vector.z << std::endl;
+			std::cout << "Difference: " << player_direction_vector.x  - camera_direction_vector.x << ", " << player_direction_vector.z - camera_direction_vector.z << std::endl << std::endl;
 			break;
 		}
 
 		case 'y':
 		{
 			std::cout << glfwGetTime() << std::endl;
-			break;
-		}
-
-		case ' ':
-		{
-			if (texture_selected < 2)
-				texture_selected++;
-			else
-				texture_selected = 0;
 			break;
 		}
 
@@ -666,6 +628,28 @@ void key_released( unsigned char key, int x, int y )
 void key_special_pressed( int key, int x, int y )
 {
 	key_special_states[ key ] = true;
+	//Up arrow
+	if (key == 101)
+	{
+		player_pos -= 0.5f * glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw)));
+	}
+	//Down arrow
+	if (key == 103)
+	{
+		player_pos += 0.5f * glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw)));
+	}
+	//Left arrow
+	if (key == 100)
+	{
+		camera_direction_vector = glm::normalize(glm::cross(glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw))), up));
+		player_pos += 0.5f * camera_direction_vector;
+	}
+	//Right arrow
+	if (key == 102)
+	{
+		camera_direction_vector = glm::normalize(glm::cross(glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw))), up));
+		player_pos -= 0.5f * camera_direction_vector;
+	}
 }
 
 void key_special_released( int key, int x, int y )
@@ -756,26 +740,10 @@ void display_func( void )
 	PerspectiveShader.SetUniform("viewMatrix", glm::value_ptr(PerspViewMatrix), 4, GL_FALSE, 1);
 	PerspectiveShader.SetUniform("modelMatrix", glm::value_ptr(PerspModelMatrix), 4, GL_FALSE, 1);
 
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, textures[texture_selected]);
-	glBindVertexArray(torus_VAO);
-	glEnable(GL_PRIMITIVE_RESTART);
-	glPrimitiveRestartIndex(99999);
-	glDrawElements(GL_TRIANGLE_STRIP, torus_indices.size(), GL_UNSIGNED_INT, (GLvoid*)0);
-	glDisable(GL_PRIMITIVE_RESTART);
-
-	if (show_normals)
-	{
-		glBindVertexArray(normal_VAO);
-		glDrawArrays(GL_LINES, 0, normal_vertices.size() / 4);
-	}
-	glBindVertexArray(0);
+	Draw(axis_VAO, axis_vertices.size() / 4, GL_QUADS);
 
 	if (glfwGetGamepadState(GLFW_JOYSTICK_1, &state))
 		GamepadInput();
-	
-	PerspectiveShader.SetUniform("modelMatrix", glm::value_ptr(PerspModelMatrix), 4, GL_FALSE, 1);
-	Draw(axis_VAO, axis_vertices.size()/4, GL_QUADS);
 
 	SkyboxShader.Use();
 	SkyboxShader.SetUniform("projectionMatrix", glm::value_ptr(PerspProjectionMatrix), 4, GL_FALSE, 1);
@@ -813,10 +781,12 @@ void init( void )
 
 	// Create buffers
 	CreateFloorBuffers();
-	CreateTorusBuffers();
 	CreateSkyboxBuffers();
 
 	CreateTextures();
+
+	player = new Model("models/player.glb");
+	player->Draw();
 
 	std::cout << "Finished initializing...\n\n";
 }

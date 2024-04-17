@@ -45,6 +45,6 @@ vec4 shade( vec4 color )
 
 void main(void)
 {
-	vec4 color = vert_Color * texture( texId, vert_TexCoord );
+	vec4 color = texture( texId, vert_TexCoord );
 	frag_Color = shade( color );
 }
