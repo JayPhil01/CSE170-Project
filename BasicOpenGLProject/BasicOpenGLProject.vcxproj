@@ -72,8 +72,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LibraryPath>C:\Users\James\Desktop\PA1_support_code\glfw-3.4.bin.WIN64\lib-vc2022;$(LibraryPath)</LibraryPath>
-    <IncludePath>C:\Users\James\Desktop\PA1_support_code\glfw-3.4.bin.WIN64\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\James\Desktop\PA1_support_code\glfw-3.4.bin.WIN64\lib-vc2022;C:\Users\James\Desktop\PA1_support_code\Assimp\lib\x64;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\James\Desktop\PA1_support_code\glfw-3.4.bin.WIN64\include;C:\Users\James\Desktop\PA1_support_code\Assimp\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -115,13 +115,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>../../freeglut/include;../../glew-2.1.0/include;../../glm</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../../freeglut/include;../../assimp/include;../../glew-2.1.0/include;../../glm</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>../../freeglut/lib/x64;../../glew-2.1.0/lib/Release/x64</AdditionalLibraryDirectories>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;glew32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>../../assimp/lib/x64;../../freeglut/lib/x64;../../glew-2.1.0/lib/Release/x64</AdditionalLibraryDirectories>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;glew32.lib;assimp-vc143-mt.lib;%(AdditionalDependencies);assimp-vc143-mt.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -132,15 +132,15 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>../../freeglut/include;../../glew-2.1.0/include;../../glm</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../../freeglut/include;../../assimp/include;../../glew-2.1.0/include;../../glm</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>../../freeglut/lib/x64;../../glew-2.1.0/lib/Release/x64</AdditionalLibraryDirectories>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;glew32.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>../../assimp/lib/x64;../../freeglut/lib/x64;../../glew-2.1.0/lib/Release/x64</AdditionalLibraryDirectories>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;glew32.lib;assimp-vc143-mt.lib;glfw3.lib;assimp-vc143-mt.lib;%(AdditionalDependencies);assimp-vc143-mt.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

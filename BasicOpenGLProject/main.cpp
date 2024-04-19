@@ -1,5 +1,6 @@
 #define _USE_MATH_DEFINES
 #define STB_IMAGE_IMPLEMENTATION
+#define MAX_BONE_INFLUENCE 4
 
 #include <GL/glew.h>
 #include <GL/freeglut.h>
@@ -7,9 +8,14 @@
 #include <glm/ext.hpp>
 #include <GLFW/glfw3.h>
 
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+
 #include <vector>
 #include <cmath>
 #include <iostream>
+#include <unordered_map>
 #include "shader.h"
 #include "shaderprogram.h"
 #include "stb_image.h"
@@ -40,22 +46,33 @@ float major_r = 5.0f;
 float minor_r = 2.5f;
 float num_segments = 16.0f;
 GLuint IndexBufferID;
-GLuint textures[3];
+GLuint tex[3];
 GLuint skybox;
 int texture_selected = 0;
 
-glm::vec3 eye, up;
-glm::vec3 direction(0.0, 0.0, -1.0);
-
-float yaw = 90.0;
-float pitch = 0.0;
+glm::vec3 eye, direction;
+glm::vec3 up(0.0, 1.0, 0.0);
+float yaw = 0.0;
+float pitch = 30.0;
 
 //Joystick parameters
 int axis_count;
-const float* axes;
+const float *axes;
+int button_count;
+const unsigned char *buttons;
 GLFWgamepadstate state;
+bool jumping = false;
+float jump_start = 0.0;
 
 glm::vec3 player_pos(0.0, 0.0, 0.0);
+glm::vec3 camera_direction_vector;
+glm::vec3 player_direction_vector = glm::normalize(glm::cross(glm::vec3(cos(glm::radians(yaw + 90.0)), 0, sin(glm::radians(yaw + 90.0))), up));
+glm::vec3 direction_vector1(0.0, 0.0, 0.0);
+glm::vec3 direction_vector2(0.0, 0.0, 0.0);
+
+float lastFrame = 0.0f;
+float deltaTime = 0.0f;
+int animationNum = 6;
 
 /*=================================================================================================
 	SHADERS & TRANSFORMATIONS
@@ -78,6 +95,646 @@ float perspRotationX = 0.0f, perspRotationY = 0.0f;
 =================================================================================================*/
 
 GLuint loadSkybox(std::vector<const char*> faces);
+GLuint TextureFromFile(aiTexture* texture);
+
+/*=================================================================================================
+	CLASSES
+=================================================================================================*/
+struct Vertex {
+	glm::vec3 Position;
+	glm::vec3 Normal;
+	glm::vec2 TexCoords;
+	int m_BoneIDs[MAX_BONE_INFLUENCE];
+	float m_Weights[MAX_BONE_INFLUENCE];
+};
+
+struct Texture {
+	GLuint id;
+	std::string type;
+};
+
+struct BoneInfo
+{
+	int id;
+	glm::mat4 offset;
+};
+
+class AssimpGLMHelpers
+{
+public:
+
+	static inline glm::mat4 ConvertMatrixToGLMFormat(const aiMatrix4x4& from)
+	{
+		glm::mat4 to;
+		//the a,b,c,d in assimp is the row ; the 1,2,3,4 is the column
+		to[0][0] = from.a1; to[1][0] = from.a2; to[2][0] = from.a3; to[3][0] = from.a4;
+		to[0][1] = from.b1; to[1][1] = from.b2; to[2][1] = from.b3; to[3][1] = from.b4;
+		to[0][2] = from.c1; to[1][2] = from.c2; to[2][2] = from.c3; to[3][2] = from.c4;
+		to[0][3] = from.d1; to[1][3] = from.d2; to[2][3] = from.d3; to[3][3] = from.d4;
+		return to;
+	}
+
+	static inline glm::vec3 GetGLMVec(const aiVector3D& vec)
+	{
+		return glm::vec3(vec.x, vec.y, vec.z);
+	}
+
+	static inline glm::quat GetGLMQuat(const aiQuaternion& pOrientation)
+	{
+		return glm::quat(pOrientation.w, pOrientation.x, pOrientation.y, pOrientation.z);
+	}
+};
+
+class Mesh {
+	public:
+		std::vector<Vertex>  vertices;
+		std::vector<GLuint>  indices;
+		std::vector<Texture> textures;
+		GLuint VAO;
+
+		Mesh(std::vector<Vertex> vertices, std::vector<GLuint> indices, std::vector<Texture> textures)
+		{
+			this->vertices = vertices;
+			this->indices = indices;
+			this->textures = textures;
+
+			setupMesh();
+		}
+		void Draw()
+		{
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, textures[0].id);
+
+			glBindVertexArray(VAO);
+			glDrawElements(GL_TRIANGLES, static_cast<GLuint>(indices.size()), GL_UNSIGNED_INT, 0);
+			glBindVertexArray(0);
+			glActiveTexture(GL_TEXTURE0);
+		}
+	private:
+		GLuint VBO, EBO;
+		void setupMesh()
+		{
+			glGenVertexArrays(1, &VAO);
+			glGenBuffers(1, &VBO);
+			glGenBuffers(1, &EBO);
+
+			glBindVertexArray(VAO);
+			glBindBuffer(GL_ARRAY_BUFFER, VBO);
+			glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), &vertices[0], GL_STATIC_DRAW);
+
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), &indices[0], GL_STATIC_DRAW);
+
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
+			glEnableVertexAttribArray(3);
+			glVertexAttribIPointer(3, 4, GL_INT, sizeof(Vertex), (void*)offsetof(Vertex, m_BoneIDs));
+			glEnableVertexAttribArray(4);
+			glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, m_Weights));
+
+			glBindVertexArray(0);
+		}
+};
+
+class Model {
+	public:
+		Model(std::string path)
+		{
+			loadModel(path);
+		}
+		void Draw()
+		{
+			for (GLuint i = 0; i < meshes.size(); i++)
+				meshes[i].Draw();
+		}
+		auto& GetBoneInfoMap() { return m_BoneInfoMap; }
+		int& GetBoneCount() { return m_BoneCounter; }
+	private:
+		std::vector<Mesh> meshes;
+		std::unordered_map<std::string, BoneInfo> m_BoneInfoMap;
+		int m_BoneCounter = 0;
+
+		void loadModel(std::string path)
+		{
+			Assimp::Importer importer;
+			const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate);
+			if (!scene)
+			{
+				std::cout << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
+				return;
+			}
+			processNode(scene->mRootNode, scene);
+		}
+		void processNode(aiNode *node, const aiScene *scene)
+		{
+			for (GLuint i = 0; i < node->mNumMeshes; i++)
+			{
+				aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+				meshes.push_back(processMesh(mesh, scene));
+			}
+			for (GLuint i = 0; i < node->mNumChildren; i++)
+			{
+				processNode(node->mChildren[i], scene);
+			}
+		}
+		Mesh processMesh(aiMesh* mesh, const aiScene* scene)
+		{
+			std::vector<Vertex> vertices;
+			std::vector<GLuint> indices;
+			std::vector<Texture> textures;
+
+			for (GLuint i = 0; i < mesh->mNumVertices; i++)
+			{
+				Vertex vertex;
+				glm::vec3 vector;
+
+				SetVertexBoneDataToDefault(vertex);
+
+				vector.x = mesh->mVertices[i].x;
+				vector.y = mesh->mVertices[i].y;
+				vector.z = mesh->mVertices[i].z;
+				vertex.Position = vector;
+
+				if (mesh->HasNormals())
+				{
+					vector.x = mesh->mNormals[i].x;
+					vector.y = mesh->mNormals[i].y;
+					vector.z = mesh->mNormals[i].z;
+					vertex.Normal = vector;
+				}
+
+				if (mesh->mTextureCoords[0])
+				{
+					glm::vec2 vec;
+					vec.x = mesh->mTextureCoords[0][i].x;
+					vec.y = mesh->mTextureCoords[0][i].y;
+					vertex.TexCoords = vec;
+				}
+				else
+					vertex.TexCoords = glm::vec2(0.0f, 0.0f);
+
+				vertices.push_back(vertex);
+			}
+
+			for (GLuint i = 0; i < mesh->mNumFaces; i++)
+			{
+				aiFace face = mesh->mFaces[i];
+
+				for (GLuint j = 0; j < face.mNumIndices; j++)
+					indices.push_back(face.mIndices[j]);
+			}
+			aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+			aiString str;
+			material->Get(AI_MATKEY_TEXTURE(aiTextureType_DIFFUSE, 0), str);
+			aiTexture *texture = scene->mTextures[atoi(str.C_Str())];
+			Texture tex;
+			tex.id = TextureFromFile(texture);
+			tex.type = "texture_diffuse";
+			textures.push_back(tex);
+
+			ExtractBoneWeightForVertices(vertices, mesh, scene);
+
+			Mesh temp(vertices, indices, textures);
+			return temp;
+		}
+		void SetVertexBoneDataToDefault(Vertex& vertex)
+		{
+			for (int i = 0; i < MAX_BONE_INFLUENCE; i++)
+			{
+				vertex.m_BoneIDs[i] = -1;
+				vertex.m_Weights[i] = 0.0f;
+			}
+		}
+
+		void SetVertexBoneData(Vertex& vertex, int boneID, float weight)
+		{
+			for (int i = 0; i < MAX_BONE_INFLUENCE; i++)
+			{
+				if (vertex.m_BoneIDs[i] < 0)
+				{
+					if (weight == 0)
+						weight = 0.000001;
+					vertex.m_Weights[i] = weight;
+					vertex.m_BoneIDs[i] = boneID;
+					break;
+				}
+			}
+		}
+
+
+		void ExtractBoneWeightForVertices(std::vector<Vertex>& vertices, aiMesh* mesh, const aiScene* scene)
+		{
+			auto& boneInfoMap = m_BoneInfoMap;
+			int& boneCount = m_BoneCounter;
+
+			for (int boneIndex = 0; boneIndex < mesh->mNumBones; boneIndex++)
+			{
+				int boneID = -1;
+				std::string boneName = mesh->mBones[boneIndex]->mName.C_Str();
+				if (boneInfoMap.find(boneName) == boneInfoMap.end())
+				{
+					BoneInfo newBoneInfo;
+					newBoneInfo.id = boneCount;
+					newBoneInfo.offset = AssimpGLMHelpers::ConvertMatrixToGLMFormat(mesh->mBones[boneIndex]->mOffsetMatrix);
+					boneInfoMap[boneName] = newBoneInfo;
+					boneID = boneCount;
+					boneCount++;
+				}
+				else
+				{
+					boneID = boneInfoMap[boneName].id;
+				}
+				assert(boneID != -1);
+				auto weights = mesh->mBones[boneIndex]->mWeights;
+				int numWeights = mesh->mBones[boneIndex]->mNumWeights;
+
+				for (int weightIndex = 0; weightIndex < numWeights; ++weightIndex)
+				{
+					int vertexId = weights[weightIndex].mVertexId;
+					float weight = weights[weightIndex].mWeight;
+					if (boneName.compare("Arm.002.R") == 0 && vertexId == 0 && strcmp(mesh->mName.C_Str(), "Cube.013") == 0)
+					{
+						std::cout << "This is the incorrect vertice on the arm: " << vertexId << std::endl;
+
+					}
+					assert(vertexId <= vertices.size());
+					SetVertexBoneData(vertices[vertexId], boneID, weight);
+
+				}
+			}
+		}
+};
+
+GLuint TextureFromFile(aiTexture *texture)
+{
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	int width, height, nrChannels;
+	unsigned char* data = stbi_load("textures/player.png", &width, &height, &nrChannels, 0);
+	if (data)
+	{
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+		stbi_image_free(texture->pcData);
+	}
+
+	return textureID;
+}
+
+struct KeyPosition
+{
+	glm::vec3 position;
+	float timeStamp;
+};
+
+struct KeyRotation
+{
+	glm::quat orientation;
+	float timeStamp;
+};
+
+struct KeyScale
+{
+	glm::vec3 scale;
+	float timeStamp;
+};
+
+class Bone
+{
+public:
+	Bone(const std::string& name, int ID, const aiNodeAnim* channel)
+		:
+		m_Name(name),
+		m_ID(ID),
+		m_LocalTransform(1.0f)
+	{
+		m_NumPositions = channel->mNumPositionKeys;
+
+		for (int positionIndex = 0; positionIndex < m_NumPositions; ++positionIndex)
+		{
+			aiVector3D aiPosition = channel->mPositionKeys[positionIndex].mValue;
+			float timeStamp = channel->mPositionKeys[positionIndex].mTime;
+			KeyPosition data;
+			data.position = AssimpGLMHelpers::GetGLMVec(aiPosition);
+			data.timeStamp = timeStamp;
+			m_Positions.push_back(data);
+		}
+
+		m_NumRotations = channel->mNumRotationKeys;
+		for (int rotationIndex = 0; rotationIndex < m_NumRotations; ++rotationIndex)
+		{
+			aiQuaternion aiOrientation = channel->mRotationKeys[rotationIndex].mValue;
+			float timeStamp = channel->mRotationKeys[rotationIndex].mTime;
+			KeyRotation data;
+			data.orientation = AssimpGLMHelpers::GetGLMQuat(aiOrientation);
+			data.timeStamp = timeStamp;
+			m_Rotations.push_back(data);
+		}
+
+		m_NumScalings = channel->mNumScalingKeys;
+		for (int keyIndex = 0; keyIndex < m_NumScalings; ++keyIndex)
+		{
+			aiVector3D scale = channel->mScalingKeys[keyIndex].mValue;
+			float timeStamp = channel->mScalingKeys[keyIndex].mTime;
+			KeyScale data;
+			data.scale = AssimpGLMHelpers::GetGLMVec(scale);
+			data.timeStamp = timeStamp;
+			m_Scales.push_back(data);
+		}
+	}
+
+	void Update(float animationTime)
+	{
+		glm::mat4 translation = InterpolatePosition(animationTime);
+		glm::mat4 rotation = InterpolateRotation(animationTime);
+		glm::mat4 scale = InterpolateScaling(animationTime);
+		m_LocalTransform = translation * rotation * scale;
+	}
+	glm::mat4 GetLocalTransform() { return m_LocalTransform; }
+	std::string GetBoneName() const { return m_Name; }
+	int GetBoneID() { return m_ID; }
+
+
+
+	int GetPositionIndex(float animationTime)
+	{
+		for (int index = 0; index < m_NumPositions - 1; ++index)
+		{
+			if (animationTime < m_Positions[index + 1].timeStamp)
+				return index;
+		}
+		assert(0);
+	}
+
+	int GetRotationIndex(float animationTime)
+	{
+		for (int index = 0; index < m_NumRotations - 1; ++index)
+		{
+			if (animationTime < m_Rotations[index + 1].timeStamp)
+				return index;
+		}
+		assert(0);
+	}
+
+	int GetScaleIndex(float animationTime)
+	{
+		for (int index = 0; index < m_NumScalings - 1; ++index)
+		{
+			if (animationTime < m_Scales[index + 1].timeStamp)
+				return index;
+		}
+		assert(0);
+	}
+
+
+private:
+
+	float GetScaleFactor(float lastTimeStamp, float nextTimeStamp, float animationTime)
+	{
+		float scaleFactor = 0.0f;
+		float midWayLength = animationTime - lastTimeStamp;
+		float framesDiff = nextTimeStamp - lastTimeStamp;
+		scaleFactor = midWayLength / framesDiff;
+		return scaleFactor;
+	}
+
+	glm::mat4 InterpolatePosition(float animationTime)
+	{
+		if (1 == m_NumPositions)
+			return glm::translate(glm::mat4(1.0f), m_Positions[0].position);
+
+		int p0Index = GetPositionIndex(animationTime);
+		int p1Index = p0Index + 1;
+		float scaleFactor = GetScaleFactor(m_Positions[p0Index].timeStamp,
+			m_Positions[p1Index].timeStamp, animationTime);
+		glm::vec3 finalPosition = glm::mix(m_Positions[p0Index].position, m_Positions[p1Index].position
+			, scaleFactor);
+		return glm::translate(glm::mat4(1.0f), finalPosition);
+	}
+
+	glm::mat4 InterpolateRotation(float animationTime)
+	{
+		if (1 == m_NumRotations)
+		{
+			auto rotation = glm::normalize(m_Rotations[0].orientation);
+			return glm::mat4(rotation);
+		}
+
+		int p0Index = GetRotationIndex(animationTime);
+		int p1Index = p0Index + 1;
+		float scaleFactor = GetScaleFactor(m_Rotations[p0Index].timeStamp,
+			m_Rotations[p1Index].timeStamp, animationTime);
+		glm::quat finalRotation = glm::slerp(m_Rotations[p0Index].orientation, m_Rotations[p1Index].orientation
+			, scaleFactor);
+		finalRotation = glm::normalize(finalRotation);
+		return glm::mat4(finalRotation);
+
+	}
+
+	glm::mat4 InterpolateScaling(float animationTime)
+	{
+		if (1 == m_NumScalings)
+			return glm::scale(glm::mat4(1.0f), m_Scales[0].scale);
+
+		int p0Index = GetScaleIndex(animationTime);
+		int p1Index = p0Index + 1;
+		float scaleFactor = GetScaleFactor(m_Scales[p0Index].timeStamp,
+			m_Scales[p1Index].timeStamp, animationTime);
+		glm::vec3 finalScale = glm::mix(m_Scales[p0Index].scale, m_Scales[p1Index].scale
+			, scaleFactor);
+		return glm::scale(glm::mat4(1.0f), finalScale);
+	}
+
+	std::vector<KeyPosition> m_Positions;
+	std::vector<KeyRotation> m_Rotations;
+	std::vector<KeyScale> m_Scales;
+	int m_NumPositions;
+	int m_NumRotations;
+	int m_NumScalings;
+
+	glm::mat4 m_LocalTransform;
+	std::string m_Name;
+	int m_ID;
+};
+
+struct AssimpNodeData
+{
+	glm::mat4 transformation;
+	std::string name;
+	int childrenCount;
+	std::vector<AssimpNodeData> children;
+};
+
+class Animation
+{
+public:
+	Animation() = default;
+
+	Animation(const std::string& animationPath, Model* model, int animationNum)
+	{
+		Assimp::Importer importer;
+		const aiScene* scene = importer.ReadFile(animationPath, aiProcess_Triangulate);
+		assert(scene && scene->mRootNode);
+		auto animation = scene->mAnimations[animationNum];
+		m_Duration = animation->mDuration;
+		m_TicksPerSecond = animation->mTicksPerSecond;
+		aiMatrix4x4 globalTransformation = scene->mRootNode->mTransformation;
+		globalTransformation = globalTransformation.Inverse();
+		ReadHierarchyData(m_RootNode, scene->mRootNode);
+		ReadMissingBones(animation, *model);
+	}
+
+	~Animation()
+	{
+	}
+
+	Bone* FindBone(const std::string& name)
+	{
+		auto iter = std::find_if(m_Bones.begin(), m_Bones.end(),
+			[&](const Bone& Bone)
+			{
+				return Bone.GetBoneName() == name;
+			}
+		);
+		if (iter == m_Bones.end()) return nullptr;
+		else return &(*iter);
+	}
+
+
+	inline float GetTicksPerSecond() { return m_TicksPerSecond; }
+	inline float GetDuration() { return m_Duration; }
+	inline const AssimpNodeData& GetRootNode() { return m_RootNode; }
+	inline const std::unordered_map<std::string, BoneInfo>& GetBoneIDMap()
+	{
+		return m_BoneInfoMap;
+	}
+
+private:
+	void ReadMissingBones(const aiAnimation* animation, Model& model)
+	{
+		int size = animation->mNumChannels;
+
+		auto& boneInfoMap = model.GetBoneInfoMap();//getting m_BoneInfoMap from Model class
+		int& boneCount = model.GetBoneCount(); //getting the m_BoneCounter from Model class
+
+		//reading channels(bones engaged in an animation and their keyframes)
+		for (int i = 0; i < size; i++)
+		{
+			auto channel = animation->mChannels[i];
+			std::string boneName = channel->mNodeName.data;
+
+			if (boneInfoMap.find(boneName) == boneInfoMap.end())
+			{
+				boneInfoMap[boneName].id = boneCount;
+				boneCount++;
+			}
+			m_Bones.push_back(Bone(channel->mNodeName.data,
+				boneInfoMap[channel->mNodeName.data].id, channel));
+		}
+
+		m_BoneInfoMap = boneInfoMap;
+	}
+
+	void ReadHierarchyData(AssimpNodeData& dest, const aiNode* src)
+	{
+		assert(src);
+
+		dest.name = src->mName.data;
+		dest.transformation = AssimpGLMHelpers::ConvertMatrixToGLMFormat(src->mTransformation);
+		dest.childrenCount = src->mNumChildren;
+
+		for (int i = 0; i < src->mNumChildren; i++)
+		{
+			AssimpNodeData newData;
+			ReadHierarchyData(newData, src->mChildren[i]);
+			dest.children.push_back(newData);
+		}
+	}
+	float m_Duration;
+	int m_TicksPerSecond;
+	std::vector<Bone> m_Bones;
+	AssimpNodeData m_RootNode;
+	std::unordered_map<std::string, BoneInfo> m_BoneInfoMap;
+};
+
+class Animator
+{
+public:
+	Animator(Animation* animation)
+	{
+		m_CurrentTime = 0.0;
+		m_CurrentAnimation = animation;
+
+		m_FinalBoneMatrices.reserve(100);
+
+		for (int i = 0; i < 100; i++)
+			m_FinalBoneMatrices.push_back(glm::mat4(1.0f));
+	}
+
+	void UpdateAnimation(float dt)
+	{
+		if (m_CurrentAnimation)
+		{
+			m_CurrentTime += m_CurrentAnimation->GetTicksPerSecond() * dt;
+			m_CurrentTime = fmod(m_CurrentTime, m_CurrentAnimation->GetDuration());
+			CalculateBoneTransform(&m_CurrentAnimation->GetRootNode(), glm::mat4(1.0f));
+		}
+	}
+
+	void PlayAnimation(Animation* pAnimation)
+	{
+		m_CurrentAnimation = pAnimation;
+		m_CurrentTime = 0.0f;
+	}
+
+	void CalculateBoneTransform(const AssimpNodeData* node, glm::mat4 parentTransform)
+	{
+		std::string nodeName = node->name;
+		glm::mat4 nodeTransform = node->transformation;
+
+		Bone* Bone = m_CurrentAnimation->FindBone(nodeName);
+
+		if (Bone)
+		{
+			Bone->Update(m_CurrentTime);
+			nodeTransform = Bone->GetLocalTransform();
+		}
+
+		glm::mat4 globalTransformation = parentTransform * nodeTransform;
+
+		auto boneInfoMap = m_CurrentAnimation->GetBoneIDMap();
+		if (boneInfoMap.find(nodeName) != boneInfoMap.end())
+		{
+			int index = boneInfoMap[nodeName].id;
+			glm::mat4 offset = boneInfoMap[nodeName].offset;
+			m_FinalBoneMatrices[index] = globalTransformation * offset;
+		}
+
+		for (int i = 0; i < node->childrenCount; i++)
+			CalculateBoneTransform(&node->children[i], globalTransformation);
+	}
+
+	std::vector<glm::mat4> GetFinalBoneMatrices()
+	{
+		return m_FinalBoneMatrices;
+	}
+
+private:
+	std::vector<glm::mat4> m_FinalBoneMatrices;
+	Animation* m_CurrentAnimation;
+	float m_CurrentTime;
+
+};
 
 /*=================================================================================================
 	OBJECTS
@@ -99,10 +756,10 @@ GLuint skybox_VAO;
 GLuint skybox_VBO;
 
 std::vector<float> axis_vertices = {
-	10.0f, -8.0f, 10.0f, 1.0f,
-	10.0f, -8.0f, -10.0f, 1.0f,
-	-10.0f, -8.0f, -10.0f, 1.0f,
-	-10.0f, -8.0f, 10.0f, 1.0f
+	10.0f, 0.0f, 10.0f, 1.0f,
+	10.0f, 0.0f, -10.0f, 1.0f,
+	-10.0f, 0.0f, -10.0f, 1.0f,
+	-10.0f, 0.0f, 10.0f, 1.0f
 };
 
 std::vector<float> axis_colors = {
@@ -157,15 +814,11 @@ std::vector<float> skyboxVertices = {
 	 1.0f, -1.0f,  1.0f
 };
 
-std::vector<float> torus_vertices;
-std::vector<float> torus_colors;
-std::vector<float> torus_textures;
-std::vector<int> torus_indices;
+Model *player;
+Animation *animation;
+Animator *animator;
 
-std::vector<float> torus_normals;
-
-std::vector<float> normal_vertices;
-std::vector<float> normal_colors;
+Model* theo;
 
 /*=================================================================================================
 	HELPER FUNCTIONS
@@ -175,90 +828,6 @@ void window_to_scene( int wx, int wy, float& sx, float& sy )
 {
 	sx = ( 2.0f * (float)wx / WindowWidth ) - 1.0f;
 	sy = 1.0f - ( 2.0f * (float)wy / WindowHeight );
-}
-
-void CreateTorusSmooth(float major, float minor, int num)
-{
-	float x, y, z, nx, ny, nz;
-	float u = 0.0f;
-	float v = 0.0f;
-	glm::vec3 normal_vector;
-	//Main segment
-	for (float phi = 0; phi <= (2.0f * M_PI) + 0.01f; phi += (2.0f * M_PI)/num)
-	{
-		//Tube segment
-		for (float theta = 0; theta <= (2.0f * M_PI) + 0.01f; theta += (2.0f * M_PI) / num)
-		{
-			x = (major + minor * cos(theta)) * cos(phi);
-			y = (major + minor * cos(theta)) * sin(phi);
-			z = minor * sin(theta);
-
-			torus_vertices.push_back(x);
-			torus_vertices.push_back(y);
-			torus_vertices.push_back(z);
-			torus_vertices.push_back(1.0f);
-
-			torus_colors.push_back(1.0f);
-			torus_colors.push_back(1.0f);
-			torus_colors.push_back(1.0f);
-			torus_colors.push_back(1.0f);
-
-			nx = cos(phi) * cos(theta);
-			ny = sin(phi) * cos(theta);
-			nz = sin(theta);
-
-			normal_vector = { nx, ny, nz };
-			normalize(normal_vector);
-
-			torus_normals.push_back(normal_vector[0]);
-			torus_normals.push_back(normal_vector[1]);
-			torus_normals.push_back(normal_vector[2]);
-			torus_normals.push_back(1.0f);
-
-			normal_vertices.push_back(x);
-			normal_vertices.push_back(y);
-			normal_vertices.push_back(z);
-			normal_vertices.push_back(1.0f);
-			normal_vertices.push_back(x + normal_vector[0]);
-			normal_vertices.push_back(y + normal_vector[1]);
-			normal_vertices.push_back(z + normal_vector[2]);
-			normal_vertices.push_back(1.0f);
-
-			normal_colors.push_back(1.0f);
-			normal_colors.push_back(0.0f);
-			normal_colors.push_back(0.0f);
-			normal_colors.push_back(1.0f);
-			normal_colors.push_back(1.0f);
-			normal_colors.push_back(0.0f);
-			normal_colors.push_back(0.0f);
-			normal_colors.push_back(1.0f);
-
-			torus_textures.push_back(u);
-			torus_textures.push_back(v);
-
-			v += 1.0 / num;
-		}
-		v = 0;
-		u += 1.0 / num;
-	}
-
-	int vertex_index = 0;
-
-	for (int i = 0; i < num; i++)
-	{
-		for (int j = 0; j < num + 1; j++)
-		{
-			torus_indices.push_back(vertex_index);
-			torus_indices.push_back(vertex_index + num + 1);
-
-			vertex_index++;
-		}
-		//Does not push the restart index if the end of the torus has been reached
-		if (i != num - 1)
-		{
-			torus_indices.push_back(99999);
-		}
-	}
 }
 
 void CreateTextures(void)
@@ -272,62 +841,6 @@ void CreateTextures(void)
 		"./textures/city_skybox_front.png",
 		"./textures/city_skybox_back.png"
 	};
-
-	glGenTextures(3, textures);
-
-	glBindTexture(GL_TEXTURE_2D, textures[0]);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	int width, height, nrChannels;
-	unsigned char* data = stbi_load("./textures/stripes.jpg", &width, &height, &nrChannels, 0);
-	if (data)
-	{
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-		glGenerateMipmap(GL_TEXTURE_2D);
-	}
-	else
-	{
-		std::cout << "Failed to load texture" << std::endl;
-	}
-	stbi_image_free(data);
-
-	glBindTexture(GL_TEXTURE_2D, textures[1]);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	data = stbi_load("./textures/cobblestone.jpg", &width, &height, &nrChannels, 0);
-	if (data)
-	{
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-		glGenerateMipmap(GL_TEXTURE_2D);
-	}
-	else
-	{
-		std::cout << "Failed to load texture" << std::endl;
-	}
-
-	stbi_image_free(data);
-
-	glBindTexture(GL_TEXTURE_2D, textures[2]);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	data = stbi_load("./textures/rainbow.jpg", &width, &height, &nrChannels, 0);
-	if (data)
-	{
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-		glGenerateMipmap(GL_TEXTURE_2D);
-	}
-	else
-	{
-		std::cout << "Failed to load texture" << std::endl;
-	}
-
-	stbi_image_free(data);
 
 	skybox = loadSkybox(faces);
 }
@@ -373,11 +886,11 @@ void CreateTransformationMatrices( void )
 	PerspProjectionMatrix = glm::perspective<float>( glm::radians( 60.0f ), (float)WindowWidth / (float)WindowHeight, 0.01f, 1000.0f );
 
 	// VIEW MATRIX
-	glm::vec3 player_center(player_pos.x, player_pos.y, player_pos.z);
-	eye.x = player_pos.x + (40.0 * cos(glm::radians(yaw)) * cos(glm::radians(pitch)));
-	eye.y = player_pos.y + (40.0 * sin(glm::radians(pitch)));
-	eye.z = player_pos.z + (40.0 * sin(glm::radians(yaw)) * cos(glm::radians(pitch)));
-	up = glm::vec3(0.0, 1.0, 0.0);
+	glm::vec3 player_center(player_pos.x, player_pos.y + 10.0f, player_pos.z);
+	direction = glm::vec3(cos(glm::radians(yaw)) * cos(glm::radians(pitch)), sin(glm::radians(pitch)), sin(glm::radians(yaw)) * cos(glm::radians(pitch)));
+	eye.x = player_pos.x + ((10.0 + 1.5*pitch) * direction.x);
+	eye.y = player_pos.y + ((10.0 + 1.5*pitch) * direction.y);
+	eye.z = player_pos.z + ((10.0 + 1.5*pitch) * direction.z);
 
 	PerspViewMatrix = glm::lookAt(eye, player_center, up);
 	SkyboxViewMatrix = glm::mat4(glm::mat3(PerspViewMatrix));
@@ -400,24 +913,6 @@ void CreateShaders( void )
 /*=================================================================================================
 	BUFFERS
 =================================================================================================*/
-void CreateNormalBuffers(void)
-{
-	glGenVertexArrays(1, &normal_VAO);
-	glBindVertexArray(normal_VAO);
-
-	glGenBuffers(2, &normal_VBO[0]);
-
-	glBindBuffer(GL_ARRAY_BUFFER, normal_VBO[0]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(normal_vertices[0]) * normal_vertices.size(), &normal_vertices[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, normal_VBO[1]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(normal_colors[0]) * normal_colors.size(), &normal_colors[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(1);
-}
-
 void CreateFloorBuffers()
 {
 	glGenVertexArrays(1, &axis_VAO);
@@ -436,43 +931,6 @@ void CreateFloorBuffers()
 	glEnableVertexAttribArray(1);
 }
 
-void CreateTorusBuffers(void)
-{
-	CreateTorusSmooth(major_r, minor_r, num_segments);
-
-	glGenVertexArrays(1, &torus_VAO);
-	glBindVertexArray(torus_VAO);
-
-	glGenBuffers(4, &torus_VBO[0]);
-
-	glBindBuffer(GL_ARRAY_BUFFER, torus_VBO[0]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(torus_vertices[0]) * torus_vertices.size(), &torus_vertices[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, torus_VBO[1]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(torus_colors[0]) * torus_colors.size(), &torus_colors[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(1);
-
-	glBindBuffer(GL_ARRAY_BUFFER, torus_VBO[2]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(torus_normals[0]) * torus_normals.size(), &torus_normals[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(2);
-
-	glBindBuffer(GL_ARRAY_BUFFER, torus_VBO[3]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(torus_textures[0]) * torus_textures.size(), &torus_textures[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(3);
-
-	//Generates buffers for the indices of the torus
-	glGenBuffers(1, &IndexBufferID);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IndexBufferID);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(torus_indices[0]) * torus_indices.size(), &torus_indices[0], GL_STATIC_DRAW);
-
-	glBindVertexArray(0);
-}
-
 void CreateSkyboxBuffers()
 {
 	glGenVertexArrays(1, &skybox_VAO);
@@ -488,22 +946,6 @@ void CreateSkyboxBuffers()
 	glBindVertexArray(0);
 }
 
-//Clears torus values and calls to create a new torus with updated parameters
-void UpdateTorus(void)
-{
-	torus_vertices.clear();
-	torus_colors.clear();
-	torus_textures.clear();
-	torus_indices.clear();
-	torus_normals.clear();
-
-	normal_vertices.clear();
-	normal_colors.clear();
-
-	CreateTorusBuffers();
-	CreateNormalBuffers();
-}
-
 void Draw(GLuint VAO, int size, GLenum primitive)
 {
 	glBindVertexArray(VAO);
@@ -513,26 +955,79 @@ void Draw(GLuint VAO, int size, GLenum primitive)
 
 void GamepadInput()
 {
-	axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &axis_count);
+	camera_direction_vector = glm::normalize(glm::cross(glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw))), up));
 
-	if (axes[2] > 0.1 || axes[2] < -0.1)
+	if (axes[2] > 0.05 || axes[2] < -0.05)
 		yaw += axes[2];
 	if (axes[3] > 0.1 || axes[3] < -0.1)
 		pitch += axes[3];
 
 	if (pitch > 70.0)
 		pitch = 70.0;
-	if (pitch < 0.0)
-		pitch = 0.0;
+	if (pitch < 7.0)
+		pitch = 7.0;
 
-	if(axes[0] > 0.1 || axes[0] < -0.1)
-		player_pos.x += axes[0] / 10.0f;
-	if(axes[1] > 0.1 || axes[1] < -0.1)
-		player_pos.z += axes[1] / 10.0f;
+	if (axes[0] > 0.05 || axes[0] < -0.05)
+	{
+		direction_vector1 = axes[0] / 2.0f * camera_direction_vector;
+		player_pos -= direction_vector1;
+		if (animationNum != 8 && !jumping)
+		{
+			delete animation;
+			delete animator;
+			animationNum = 8;
+			animation = new Animation("models/player.glb", player, animationNum);
+			animator = new Animator(animation);
+		}
+	}
+	if (axes[1] > 0.1 || axes[1] < -0.1)
+	{
+		direction_vector2 = axes[1] / 2.0f * glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw)));
+		player_pos += direction_vector2;
+		if (animationNum != 8 && !jumping)
+		{
+			delete animation;
+			delete animator;
+			animationNum = 8;
+			animation = new Animation("models/player.glb", player, animationNum);
+			animator = new Animator(animation);
+		}
+	}
+	if (axes[0] < 0.05 && axes[0] > -0.05 && axes[1] < 0.1 && axes[1] > -0.1)
+	{
+		if (animationNum != 6 && !jumping)
+		{
+			delete animation;
+			delete animator;
+			animationNum = 6;
+			animation = new Animation("models/player.glb", player, animationNum);
+			animator = new Animator(animation);
+		}
+	}
+	if (GLFW_PRESS == buttons[0])
+	{
+		if (animationNum != 7)
+		{
+			jump_start = glfwGetTime();
+			delete animation;
+			delete animator;
+			animationNum = 7;
+			animation = new Animation("models/player.glb", player, animationNum);
+			animator = new Animator(animation);
+			jumping = true;
+		}
+	}
 
-	PerspModelMatrix = glm::translate(PerspModelMatrix, player_pos);
+	if (jumping && glfwGetTime() - jump_start > 0.8)
+		jumping = false;
+
+	if(direction_vector1 != glm::vec3(0.0, 0.0, 0.0) || direction_vector2 != glm::vec3(0.0, 0.0, 0.0))
+		player_direction_vector = (-direction_vector1 + direction_vector2) * glm::vec3(0.5, 0, 0.5);
+
+	PerspModelMatrix *= glm::inverse(glm::lookAt(player_pos, player_pos - player_direction_vector, up));
+	PerspModelMatrix = glm::scale(PerspModelMatrix, glm::vec3(4.0f, 4.0f, 4.0f));
 	PerspectiveShader.SetUniform("modelMatrix", glm::value_ptr(PerspModelMatrix), 4, GL_FALSE, 1);
-	Draw(axis_VAO, axis_vertices.size()/4, GL_QUADS);
+	player->Draw();
 }
 
 /*=================================================================================================
@@ -576,76 +1071,41 @@ void keyboard_func( unsigned char key, int x, int y )
 			break;
 		}
 
-		case 'q':
-		{
-			num_segments++;
-			UpdateTorus();
-			break;
-		}
-
 		case 'a':
 		{
-			if (num_segments > 1)
-			{
-				num_segments--;
-				UpdateTorus();
-			}
+			yaw += 2.0;
 			break;
 		}
 
 		case 'w':
 		{
-			minor_r += 0.1f;
-			UpdateTorus();
+			if (pitch > 7.0)
+				pitch -= 2.0;
 			break;
 		}
 
 		case 's':
 		{
-			minor_r -= 0.1f;
-			UpdateTorus();
-			break;
-		}
-
-		case 'e':
-		{
-			major_r += 0.1f;
-			UpdateTorus();
+			if (pitch < 70.0)
+				pitch += 2.0;
 			break;
 		}
 
 		case 'd':
 		{
-			major_r -= 0.1f;
-			UpdateTorus();
-			break;
-		}
-
-		case 'c':
-		{
-			show_normals = !show_normals;
-			UpdateTorus();
+			yaw -= 2.0;
 			break;
 		}
 
 		case 't':
 		{
-			std::cout << yaw << ", " << pitch << std::endl;
+			std::cout << glfwGetTime() << std::endl;
 			break;
 		}
 
 		case 'y':
 		{
 			std::cout << glfwGetTime() << std::endl;
-			break;
-		}
-
-		case ' ':
-		{
-			if (texture_selected < 2)
-				texture_selected++;
-			else
-				texture_selected = 0;
 			break;
 		}
 
@@ -666,6 +1126,28 @@ void key_released( unsigned char key, int x, int y )
 void key_special_pressed( int key, int x, int y )
 {
 	key_special_states[ key ] = true;
+	//Up arrow
+	if (key == 101)
+	{
+		player_pos -= 0.5f * glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw)));
+	}
+	//Down arrow
+	if (key == 103)
+	{
+		player_pos += 0.5f * glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw)));
+	}
+	//Left arrow
+	if (key == 100)
+	{
+		camera_direction_vector = glm::normalize(glm::cross(glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw))), up));
+		player_pos += 0.5f * camera_direction_vector;
+	}
+	//Right arrow
+	if (key == 102)
+	{
+		camera_direction_vector = glm::normalize(glm::cross(glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw))), up));
+		player_pos -= 0.5f * camera_direction_vector;
+	}
 }
 
 void key_special_released( int key, int x, int y )
@@ -750,32 +1232,29 @@ void display_func( void )
 		glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 	else
 		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+
+	float currentFrame = glfwGetTime();
+	deltaTime = currentFrame - lastFrame;
+	lastFrame = currentFrame;
+	animator->UpdateAnimation(deltaTime);
 	
 	PerspectiveShader.Use();
 	PerspectiveShader.SetUniform("projectionMatrix", glm::value_ptr(PerspProjectionMatrix), 4, GL_FALSE, 1);
 	PerspectiveShader.SetUniform("viewMatrix", glm::value_ptr(PerspViewMatrix), 4, GL_FALSE, 1);
 	PerspectiveShader.SetUniform("modelMatrix", glm::value_ptr(PerspModelMatrix), 4, GL_FALSE, 1);
 
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, textures[texture_selected]);
-	glBindVertexArray(torus_VAO);
-	glEnable(GL_PRIMITIVE_RESTART);
-	glPrimitiveRestartIndex(99999);
-	glDrawElements(GL_TRIANGLE_STRIP, torus_indices.size(), GL_UNSIGNED_INT, (GLvoid*)0);
-	glDisable(GL_PRIMITIVE_RESTART);
+	Draw(axis_VAO, axis_vertices.size() / 4, GL_QUADS);
 
-	if (show_normals)
+	auto transforms = animator->GetFinalBoneMatrices();
+	for (int i = 0; i < transforms.size(); i++)
 	{
-		glBindVertexArray(normal_VAO);
-		glDrawArrays(GL_LINES, 0, normal_vertices.size() / 4);
+		std::string temp = "finalBonesMatrices[" + std::to_string(i) + "]";
+		GLchar* finalBonesMatrices = (GLchar*)temp.c_str();
+		PerspectiveShader.SetUniform(finalBonesMatrices, glm::value_ptr(transforms[i]), 4, GL_FALSE, 1);
 	}
-	glBindVertexArray(0);
-
+	
 	if (glfwGetGamepadState(GLFW_JOYSTICK_1, &state))
 		GamepadInput();
-	
-	PerspectiveShader.SetUniform("modelMatrix", glm::value_ptr(PerspModelMatrix), 4, GL_FALSE, 1);
-	Draw(axis_VAO, axis_vertices.size()/4, GL_QUADS);
 
 	SkyboxShader.Use();
 	SkyboxShader.SetUniform("projectionMatrix", glm::value_ptr(PerspProjectionMatrix), 4, GL_FALSE, 1);
@@ -813,10 +1292,21 @@ void init( void )
 
 	// Create buffers
 	CreateFloorBuffers();
-	CreateTorusBuffers();
 	CreateSkyboxBuffers();
 
 	CreateTextures();
+
+	if (glfwGetGamepadState(GLFW_JOYSTICK_1, &state))
+	{
+		axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &axis_count);
+		buttons = glfwGetJoystickButtons(GLFW_JOYSTICK_1, &button_count);
+	}
+
+	player = new Model("models/player.glb");
+	animation = new Animation("models/player.glb", player, animationNum);
+	animator = new Animator(animation);
+
+	player->Draw();
 
 	std::cout << "Finished initializing...\n\n";
 }
