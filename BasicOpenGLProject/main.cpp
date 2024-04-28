@@ -30,10 +30,6 @@ const int InitWindowHeight = 800;
 int WindowWidth  = InitWindowWidth;
 int WindowHeight = InitWindowHeight;
 
-// Last mouse cursor position
-int LastMousePosX = 0;
-int LastMousePosY = 0;
-
 // Arrays that track which keys are currently pressed
 bool key_states[256];
 bool key_special_states[256];
@@ -50,6 +46,7 @@ GLuint tex[3];
 GLuint skybox;
 int texture_selected = 0;
 
+//Camera
 glm::vec3 eye, direction;
 glm::vec3 up(0.0, 1.0, 0.0);
 float yaw = 0.0;
@@ -61,6 +58,8 @@ const float *axes;
 int button_count;
 const unsigned char *buttons;
 GLFWgamepadstate state;
+
+//Jumping and falling
 static bool jumping = false;
 static bool standing = true;
 static float jump_start = 0.0f;
@@ -71,12 +70,15 @@ static float jump_velocity = 0.0f;
 static float initial_jump_pos = 0.0f;
 static float jump_displacement = 0.0f;
 
+//Player movement and direction-facing
 glm::vec3 player_pos(0.0, 0.0, 0.0);
 glm::vec3 camera_direction_vector;
 glm::vec3 player_direction_vector = glm::normalize(glm::cross(glm::vec3(cos(glm::radians(yaw + 90.0)), 0, sin(glm::radians(yaw + 90.0))), up));
 glm::vec3 direction_vector1(0.0, 0.0, 0.0);
 glm::vec3 direction_vector2(0.0, 0.0, 0.0);
+glm::vec3 respawn_point(0.0, 0.0, 0.0);
 
+//Animation
 float lastFrame = 0.0f;
 float deltaTime = 0.0f;
 int animationNum = 6;
@@ -1020,9 +1022,6 @@ private:
 //VAO -> the object "as a whole", the collection of buffers that make up its data
 //VBOs -> the individual buffers/arrays with data, for ex: one for coordinates, one for color, etc.
 
-GLuint axis_VAO;
-GLuint axis_VBO[2];
-
 GLuint torus_VAO;
 GLuint torus_VBO[4];
 
@@ -1031,20 +1030,6 @@ GLuint normal_VBO[2];
 
 GLuint skybox_VAO;
 GLuint skybox_VBO;
-
-std::vector<float> axis_vertices = {
-	10.0f, 0.0f, 10.0f, 1.0f,
-	10.0f, 0.0f, -10.0f, 1.0f,
-	-10.0f, 0.0f, -10.0f, 1.0f,
-	-10.0f, 0.0f, 10.0f, 1.0f
-};
-
-std::vector<float> axis_colors = {
-	1.0f, 0.0f, 0.0f, 1.0f,
-	1.0f, 0.0f, 0.0f, 1.0f,
-	0.0f, 1.0f, 0.0f, 1.0f,
-	0.0f, 1.0f, 0.0f, 1.0f,
-};
 
 std::vector<float> skyboxVertices = {
 	// positions          
@@ -1190,23 +1175,6 @@ void CreateShaders( void )
 /*=================================================================================================
 	BUFFERS
 =================================================================================================*/
-void CreateFloorBuffers()
-{
-	glGenVertexArrays(1, &axis_VAO);
-	glBindVertexArray(axis_VAO);
-
-	glGenBuffers(2, &axis_VBO[0]);
-
-	glBindBuffer(GL_ARRAY_BUFFER, axis_VBO[0]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(axis_vertices[0]) * axis_vertices.size(), &axis_vertices[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, axis_VBO[1]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(axis_colors[0]) * axis_colors.size(), &axis_colors[0], GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(1);
-}
 
 void CreateSkyboxBuffers()
 {
@@ -1233,6 +1201,10 @@ void Draw(GLuint VAO, int size, GLenum primitive)
 void checkCollision()
 {
 	bool collided = false;
+
+	if (player_pos.y < -50.0f)
+		player_pos = respawn_point;
+
 	for (int i = 0; i < floorTiles.size(); i++)
 	{
 		//Check that player is within x-axis bounds of tile
@@ -1439,7 +1411,7 @@ void keyboard_func( unsigned char key, int x, int y )
 
 		case 't':
 		{
-			std::cout << fall_start << std::endl;
+			std::cout << player_pos.y << std::endl;
 			break;
 		}
 
@@ -1526,9 +1498,6 @@ void mouse_func( int button, int state, int x, int y )
 	}
 
 	mouse_states[ button ] = ( state == GLUT_DOWN );
-
-	LastMousePosX = x;
-	LastMousePosY = y;
 }
 
 void passive_motion_func( int x, int y )
@@ -1538,9 +1507,6 @@ void passive_motion_func( int x, int y )
 
 	float px, py;
 	window_to_scene( x, y, px, py );
-
-	LastMousePosX = x;
-	LastMousePosY = y;
 }
 
 void active_motion_func( int x, int y )
@@ -1550,15 +1516,6 @@ void active_motion_func( int x, int y )
 
 	float px, py;
 	window_to_scene( x, y, px, py );
-
-	if( mouse_states[0] == true )
-	{
-		perspRotationY += ( x - LastMousePosX ) * perspSensitivity;
-		perspRotationX += ( y - LastMousePosY ) * perspSensitivity;
-	}
-
-	LastMousePosX = x;
-	LastMousePosY = y;
 }
 
 void deletePointers()
@@ -1648,18 +1605,20 @@ void init( void )
 	// Create shaders
 	CreateShaders();
 
-	// Create buffers
-	CreateFloorBuffers();
+	//Create skybox buffers
 	CreateSkyboxBuffers();
 
+	//Load skybox textures
 	CreateTextures();
 
+	//Load controller axes and buttons
 	if (glfwGetGamepadState(GLFW_JOYSTICK_1, &state))
 	{
 		axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &axis_count);
 		buttons = glfwGetJoystickButtons(GLFW_JOYSTICK_1, &button_count);
 	}
 
+	//Create player model and neutral animation
 	player = new Model("models/player.glb");
 	animation = new Animation("models/player.glb", player, animationNum);
 	animator = new Animator(animation);
