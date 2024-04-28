@@ -61,8 +61,15 @@ const float *axes;
 int button_count;
 const unsigned char *buttons;
 GLFWgamepadstate state;
-bool jumping = false;
-float jump_start = 0.0;
+static bool jumping = false;
+static bool standing = true;
+static float jump_start = 0.0f;
+static float fall_start = 0.0f;
+static float jump_height = 0.5f;
+static float gravity = 9.81f;
+static float jump_velocity = 0.0f;
+static float initial_jump_pos = 0.0f;
+static float jump_displacement = 0.0f;
 
 glm::vec3 player_pos(0.0, 0.0, 0.0);
 glm::vec3 camera_direction_vector;
@@ -95,7 +102,8 @@ float perspRotationX = 0.0f, perspRotationY = 0.0f;
 =================================================================================================*/
 
 GLuint loadSkybox(std::vector<const char*> faces);
-GLuint TextureFromFile(aiTexture* texture);
+GLuint TextureFromFile();
+GLuint FloorTexture();
 
 /*=================================================================================================
 	CLASSES
@@ -292,7 +300,7 @@ class Model {
 			material->Get(AI_MATKEY_TEXTURE(aiTextureType_DIFFUSE, 0), str);
 			aiTexture *texture = scene->mTextures[atoi(str.C_Str())];
 			Texture tex;
-			tex.id = TextureFromFile(texture);
+			tex.id = TextureFromFile();
 			tex.type = "texture_diffuse";
 			textures.push_back(tex);
 
@@ -369,7 +377,7 @@ class Model {
 		}
 };
 
-GLuint TextureFromFile(aiTexture *texture)
+GLuint TextureFromFile()
 {
 	GLuint textureID;
 	glGenTextures(1, &textureID);
@@ -380,12 +388,281 @@ GLuint TextureFromFile(aiTexture *texture)
 		glBindTexture(GL_TEXTURE_2D, textureID);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
 
-		stbi_image_free(texture->pcData);
+		stbi_image_free(data);
+	}
+
+	return textureID;
+}
+
+class rectangularPrism {
+public:
+	float x;
+	float y;
+	float z;
+	float length;
+	float width;
+	float height;
+
+	rectangularPrism(float x, float y, float z, float length, float width, float height) {
+		this->x = x;
+		this->y = y;
+		this->z = z;
+		this->length = length;
+		this->width = width;
+		this->height = height;
+
+		std::vector<Vertex> vertices = calcVertices();
+		std::vector<GLuint>  indices;
+		for (int i = 0; i < 36; i++) {
+			indices.push_back(i);
+		}
+		std::vector<Texture> textures;
+		Texture tex;
+		tex.id = FloorTexture();
+		tex.type = "texture_diffuse";
+		textures.push_back(tex);
+		mesh = new Mesh(vertices, indices, textures);
+	}
+
+	void Draw() {
+		mesh->Draw();
+	}
+
+	float minX() {
+		if (length >= 0) {
+			return x;
+		}
+		else {
+			return x + length;
+		}
+	}
+
+	float maxX() {
+		if (length >= 0) {
+			return x + length;
+		}
+		else {
+			return x;
+		}
+	}
+
+	float minY() {
+		if (width >= 0) {
+			return y;
+		}
+		else {
+			return y + width;
+		}
+	}
+
+	float maxY() {
+		if (width >= 0) {
+			return y + width;
+		}
+		else {
+			return y;
+		}
+	}
+
+	float minZ() {
+		if (height >= 0) {
+			return z;
+		}
+		else {
+			return z + height;
+		}
+	}
+
+	float maxZ() {
+		if (height >= 0) {
+			return z + height;
+		}
+		else {
+			return z;
+		}
+	}
+
+private:
+	Mesh* mesh;
+
+	enum Direction {
+		xpos,
+		xneg,
+		ypos,
+		yneg,
+		zpos,
+		zneg
+	};
+
+	enum texPos {
+		tl,
+		tr,
+		bl,
+		br
+	};
+
+	Vertex calcVertex(float xPos, float yPos, float zPos, Direction dir, texPos tex) {
+		Vertex vertex;
+		glm::vec3 vector;
+
+		//Position
+		vector.x = xPos;
+		vector.y = yPos;
+		vector.z = zPos;
+		vertex.Position = vector;
+
+		//Normals
+		float normx = 0;
+		float normy = 0;
+		float normz = 0;
+		switch (dir) {
+		case xpos:
+			normx = 1;
+			break;
+		case xneg:
+			normx = -1;
+			break;
+		case ypos:
+			normy = 1;
+			break;
+		case yneg:
+			normy = -1;
+			break;
+		case zpos:
+			normz = 1;
+			break;
+		case zneg:
+			normz = -1;
+			break;
+		}
+
+		vector.x = normx;
+		vector.y = normy;
+		vector.z = normz;
+		vertex.Normal = vector;
+
+		//Texture Coordinates
+		glm::vec2 vec;
+
+		float texX;
+		float texY;
+
+		switch (tex) {
+		case tl:
+			texX = 1;
+			texY = 0;
+			break;
+		case tr:
+			texX = 1;
+			texY = 1;
+			break;
+		case bl:
+			texX = 0;
+			texY = 0;
+			break;
+		case br:
+			texX = 0;
+			texY = 1;
+			break;
+		}
+		vec.x = texX;
+		vec.y = texY;
+		vertex.TexCoords = vec;
+
+		return vertex;
+	}
+
+	std::vector<Vertex> calcVertices() {
+		std::vector<Vertex>  vertices;
+		for (GLuint i = 0; i < 6; i++) //Different Faces
+		{
+			Direction dir = Direction(i);
+			float x2 = x + length;
+			float y2 = y + width;
+			float z2 = z + height;
+			switch (dir) {
+			case xpos:
+				vertices.push_back(calcVertex(x2, y, z, Direction(i), bl));
+				vertices.push_back(calcVertex(x2, y2, z, Direction(i), br));
+				vertices.push_back(calcVertex(x2, y2, z2, Direction(i), tr));
+
+				vertices.push_back(calcVertex(x2, y2, z2, Direction(i), tr));
+				vertices.push_back(calcVertex(x2, y, z2, Direction(i), tl));
+				vertices.push_back(calcVertex(x2, y, z, Direction(i), bl));
+				break;
+			case xneg:
+				vertices.push_back(calcVertex(x, y, z, Direction(i), bl));
+				vertices.push_back(calcVertex(x, y2, z2, Direction(i), tr));
+				vertices.push_back(calcVertex(x, y2, z, Direction(i), br));
+
+				vertices.push_back(calcVertex(x, y2, z2, Direction(i), tr));
+				vertices.push_back(calcVertex(x, y, z, Direction(i), bl));
+				vertices.push_back(calcVertex(x, y, z2, Direction(i), tl));
+				break;
+			case ypos:
+				vertices.push_back(calcVertex(x, y2, z, Direction(i), bl));
+				vertices.push_back(calcVertex(x2, y2, z2, Direction(i), tr));
+				vertices.push_back(calcVertex(x2, y2, z, Direction(i), br));
+
+				vertices.push_back(calcVertex(x, y2, z2, Direction(i), tl));
+				vertices.push_back(calcVertex(x2, y2, z2, Direction(i), tr));
+				vertices.push_back(calcVertex(x, y2, z, Direction(i), bl));
+				break;
+			case yneg:
+				vertices.push_back(calcVertex(x, y, z, Direction(i), bl));
+				vertices.push_back(calcVertex(x2, y, z, Direction(i), br));
+				vertices.push_back(calcVertex(x2, y, z2, Direction(i), tr));
+
+				vertices.push_back(calcVertex(x2, y, z2, Direction(i), tr));
+				vertices.push_back(calcVertex(x, y, z2, Direction(i), tl));
+				vertices.push_back(calcVertex(x, y, z, Direction(i), bl));
+				break;
+			case zpos:
+				vertices.push_back(calcVertex(x, y, z2, Direction(i), bl));
+				vertices.push_back(calcVertex(x2, y, z2, Direction(i), br));
+				vertices.push_back(calcVertex(x2, y2, z2, Direction(i), tr));
+
+				vertices.push_back(calcVertex(x2, y2, z2, Direction(i), tr));
+				vertices.push_back(calcVertex(x, y2, z2, Direction(i), tl));
+				vertices.push_back(calcVertex(x, y, z2, Direction(i), bl));
+				break;
+			case zneg:
+				vertices.push_back(calcVertex(x, y, z, Direction(i), bl));
+				vertices.push_back(calcVertex(x2, y2, z, Direction(i), tr));
+				vertices.push_back(calcVertex(x2, y, z, Direction(i), br));
+
+				vertices.push_back(calcVertex(x, y2, z, Direction(i), tl));
+				vertices.push_back(calcVertex(x2, y2, z, Direction(i), tr));
+				vertices.push_back(calcVertex(x, y, z, Direction(i), bl));
+				break;
+			}
+		}
+		return vertices;
+	}
+};
+
+GLuint FloorTexture()
+{
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	int width, height, nrChannels;
+	unsigned char* data = stbi_load("textures/stripes.jpg", &width, &height, &nrChannels, 0);
+	if (data)
+	{
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+
+		stbi_image_free(data);
 	}
 
 	return textureID;
@@ -818,7 +1095,7 @@ Model *player;
 Animation *animation;
 Animator *animator;
 
-Model* theo;
+std::vector<rectangularPrism> floorTiles;
 
 /*=================================================================================================
 	HELPER FUNCTIONS
@@ -953,6 +1230,40 @@ void Draw(GLuint VAO, int size, GLenum primitive)
 	glBindVertexArray(0);
 }
 
+void checkCollision()
+{
+	bool collided = false;
+	for (int i = 0; i < floorTiles.size(); i++)
+	{
+		//Check that player is within x-axis bounds of tile
+		if (player_pos.x > floorTiles[i].minX() && player_pos.x < floorTiles[i].maxX())
+		{
+			//Check that player is within z-axis bounds of tile
+			if (player_pos.z > floorTiles[i].minZ() && player_pos.z < floorTiles[i].maxZ())
+			{
+				//Check if player has fallen into or is standing on the tile
+				if (player_pos.y > floorTiles[i].minY() && player_pos.y <= floorTiles[i].maxY())
+				{
+					player_pos.y = floorTiles[i].maxY();
+					jump_displacement = 0.0f;
+					fall_start = 0.0f;
+					jumping = false;
+					standing = true;
+					collided = true;
+					break;
+				}
+			}
+		}
+	}
+
+	if (!collided)
+	{
+		standing = false;
+		if (fall_start == 0.0f)
+			fall_start = glfwGetTime();
+	}
+}
+
 void GamepadInput()
 {
 	camera_direction_vector = glm::normalize(glm::cross(glm::vec3(cos(glm::radians(yaw)), 0, sin(glm::radians(yaw))), up));
@@ -1004,22 +1315,51 @@ void GamepadInput()
 			animator = new Animator(animation);
 		}
 	}
-	if (GLFW_PRESS == buttons[0])
+
+	//Only allows jump if player is not already jumping and is standing on ground
+	if (GLFW_PRESS == buttons[0] && !jumping && standing)
 	{
-		if (animationNum != 7)
+		jump_start = glfwGetTime();
+		jump_velocity = sqrt(2.0f * gravity * jump_height);
+		jumping = true;
+		standing = false;
+		player_pos.y += 0.1f;
+
+		delete animation;
+		delete animator;
+		animationNum = 7;
+		animation = new Animation("models/player.glb", player, animationNum);
+		animator = new Animator(animation);
+	}
+
+	float current_time = glfwGetTime();
+
+	checkCollision();
+
+	//Applies gravity if collision is not detected
+	if (!standing)
+	{
+		if (jumping)
 		{
-			jump_start = glfwGetTime();
-			delete animation;
-			delete animator;
-			animationNum = 7;
-			animation = new Animation("models/player.glb", player, animationNum);
-			animator = new Animator(animation);
-			jumping = true;
+			float elapsed_time = current_time - jump_start;
+			jump_displacement = jump_velocity * elapsed_time - 0.5f * gravity * elapsed_time * elapsed_time;
+			//Limits fall speed
+			if (jump_displacement < -3.0)
+				jump_displacement = -3.0;
+			player_pos.y += jump_displacement;
+		}
+		//Applies gravity when player falls off tile without jumping
+		else
+		{
+			float elapsed_time = current_time - fall_start;
+			jump_displacement =  -gravity * elapsed_time * elapsed_time;
+			//Limits fall speed
+			if (jump_displacement < -3.0)
+				jump_displacement = -3.0;
+			player_pos.y += jump_displacement;
 		}
 	}
 
-	if (jumping && glfwGetTime() - jump_start > 0.8)
-		jumping = false;
 
 	if(direction_vector1 != glm::vec3(0.0, 0.0, 0.0) || direction_vector2 != glm::vec3(0.0, 0.0, 0.0))
 		player_direction_vector = (-direction_vector1 + direction_vector2) * glm::vec3(0.5, 0, 0.5);
@@ -1099,13 +1439,19 @@ void keyboard_func( unsigned char key, int x, int y )
 
 		case 't':
 		{
-			std::cout << glfwGetTime() << std::endl;
+			std::cout << fall_start << std::endl;
 			break;
 		}
 
 		case 'y':
 		{
 			std::cout << glfwGetTime() << std::endl;
+			break;
+		}
+
+		case ' ':
+		{
+			player_pos = glm::vec3(0.0, 0.0, 0.0);
 			break;
 		}
 
@@ -1215,6 +1561,13 @@ void active_motion_func( int x, int y )
 	LastMousePosY = y;
 }
 
+void deletePointers()
+{
+	delete player;
+	delete animation;
+	delete animator;
+}
+
 /*=================================================================================================
 	RENDERING
 =================================================================================================*/
@@ -1236,14 +1589,19 @@ void display_func( void )
 	float currentFrame = glfwGetTime();
 	deltaTime = currentFrame - lastFrame;
 	lastFrame = currentFrame;
-	animator->UpdateAnimation(deltaTime);
+	//Pause animation while in mid-air
+	if(glfwGetTime() - jump_start < 0.3 || !jumping)
+		animator->UpdateAnimation(deltaTime);
+
 	
 	PerspectiveShader.Use();
 	PerspectiveShader.SetUniform("projectionMatrix", glm::value_ptr(PerspProjectionMatrix), 4, GL_FALSE, 1);
 	PerspectiveShader.SetUniform("viewMatrix", glm::value_ptr(PerspViewMatrix), 4, GL_FALSE, 1);
 	PerspectiveShader.SetUniform("modelMatrix", glm::value_ptr(PerspModelMatrix), 4, GL_FALSE, 1);
 
-	Draw(axis_VAO, axis_vertices.size() / 4, GL_QUADS);
+	for (int i = 0; i < floorTiles.size(); i++) {
+		floorTiles[i].Draw();
+	}
 
 	auto transforms = animator->GetFinalBoneMatrices();
 	for (int i = 0; i < transforms.size(); i++)
@@ -1306,7 +1664,8 @@ void init( void )
 	animation = new Animation("models/player.glb", player, animationNum);
 	animator = new Animator(animation);
 
-	player->Draw();
+	floorTiles.push_back(rectangularPrism(-15.5, -0.1, -15.5, 60, 2, 60));
+	floorTiles.push_back(rectangularPrism(-15.5, -0.1, 100.5, 60, 2, 60));
 
 	std::cout << "Finished initializing...\n\n";
 }
@@ -1359,6 +1718,8 @@ int main( int argc, char** argv )
 
 	// Enter the main loop
 	glutMainLoop();
+
+	deletePointers();
 
 	glfwTerminate();
 	return EXIT_SUCCESS;
