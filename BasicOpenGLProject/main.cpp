@@ -80,6 +80,7 @@ glm::vec3 respawn_point(0.0, 0.0, 0.0);
 
 //Animation
 float lastFrame = 0.0f;
+float lastFrameAnim = 0.0f;
 float deltaTime = 0.0f;
 int animationNum = 6;
 
@@ -105,7 +106,9 @@ float perspRotationX = 0.0f, perspRotationY = 0.0f;
 
 GLuint loadSkybox(std::vector<const char*> faces);
 GLuint TextureFromFile();
-GLuint FloorTexture();
+GLuint FloorTexture1();
+GLuint FloorTexture2();
+GLuint FloorTexture3();
 
 /*=================================================================================================
 	CLASSES
@@ -409,14 +412,18 @@ public:
 	float length;
 	float width;
 	float height;
+	bool isCheckpoint;
+	bool isFinish;
 
-	rectangularPrism(float x, float y, float z, float length, float width, float height) {
+	rectangularPrism(float x, float y, float z, float length, float width, float height, bool isCheckpoint, bool isFinish) {
 		this->x = x;
 		this->y = y;
 		this->z = z;
 		this->length = length;
 		this->width = width;
 		this->height = height;
+		this->isCheckpoint = isCheckpoint;
+		this->isFinish = isFinish;
 
 		std::vector<Vertex> vertices = calcVertices();
 		std::vector<GLuint>  indices;
@@ -425,7 +432,10 @@ public:
 		}
 		std::vector<Texture> textures;
 		Texture tex;
-		tex.id = FloorTexture();
+		if (!isCheckpoint && !isFinish)
+			tex.id = FloorTexture1();
+		else if (isCheckpoint && !isFinish)
+			tex.id = FloorTexture2();
 		tex.type = "texture_diffuse";
 		textures.push_back(tex);
 		mesh = new Mesh(vertices, indices, textures);
@@ -487,6 +497,10 @@ public:
 		else {
 			return z;
 		}
+	}
+
+	void deleteMesh() {
+		delete mesh;
 	}
 
 private:
@@ -648,21 +662,63 @@ private:
 	}
 };
 
-GLuint FloorTexture()
+GLuint FloorTexture1()
 {
 	GLuint textureID;
 	glGenTextures(1, &textureID);
 	int width, height, nrChannels;
-	unsigned char* data = stbi_load("textures/stripes.jpg", &width, &height, &nrChannels, 0);
+	unsigned char* data = stbi_load("textures/casset_block_1.png", &width, &height, &nrChannels, 0);
 	if (data)
 	{
 		glBindTexture(GL_TEXTURE_2D, textureID);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+		stbi_image_free(data);
+	}
+
+	return textureID;
+}
+GLuint FloorTexture2()
+{
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	int width, height, nrChannels;
+	unsigned char* data = stbi_load("textures/wood_3.png", &width, &height, &nrChannels, 0);
+	if (data)
+	{
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+		stbi_image_free(data);
+	}
+
+	return textureID;
+}
+GLuint FloorTexture3()
+{
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	int width, height, nrChannels;
+	unsigned char* data = stbi_load("textures/special_floor_1.png", &width, &height, &nrChannels, 0);
+	if (data)
+	{
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
 
 		stbi_image_free(data);
 	}
@@ -1129,8 +1185,8 @@ GLuint loadSkybox(std::vector<const char*> faces)
 		}
 	}
 
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
@@ -1222,6 +1278,15 @@ void checkCollision()
 					jumping = false;
 					standing = true;
 					collided = true;
+
+					if (floorTiles[i].isCheckpoint)
+					{
+						float center_x = (floorTiles[i].maxX() + floorTiles[i].minX()) / 2.0f;
+						float center_y = floorTiles[i].maxY();
+						float center_z = (floorTiles[i].maxZ() + floorTiles[i].minZ()) / 2.0f;
+						
+						respawn_point = glm::vec3(center_x, center_y, center_z);
+					}
 					break;
 				}
 			}
@@ -1292,7 +1357,7 @@ void GamepadInput()
 	if (GLFW_PRESS == buttons[0] && !jumping && standing)
 	{
 		jump_start = glfwGetTime();
-		jump_velocity = sqrt(2.0f * gravity * jump_height);
+		jump_velocity = sqrt(gravity * jump_height) / 2.0f;
 		jumping = true;
 		standing = false;
 		player_pos.y += 0.1f;
@@ -1314,7 +1379,7 @@ void GamepadInput()
 		if (jumping)
 		{
 			float elapsed_time = current_time - jump_start;
-			jump_displacement = jump_velocity * elapsed_time - 0.5f * gravity * elapsed_time * elapsed_time;
+			jump_displacement = jump_velocity - 0.5f * gravity * elapsed_time * elapsed_time;
 			//Limits fall speed
 			if (jump_displacement < -3.0)
 				jump_displacement = -3.0;
@@ -1354,8 +1419,12 @@ void GamepadInput()
 
 void idle_func()
 {
-	//uncomment below to repeatedly draw new frames
-	glutPostRedisplay();
+	float currentFrame = glfwGetTime();
+	if (currentFrame - lastFrame > 0.005)
+	{
+		lastFrame = currentFrame;
+		glutPostRedisplay();
+	}
 }
 
 void reshape_func( int width, int height )
@@ -1411,7 +1480,7 @@ void keyboard_func( unsigned char key, int x, int y )
 
 		case 't':
 		{
-			std::cout << player_pos.y << std::endl;
+			std::cout << respawn_point.x << ", " << respawn_point.y << ", " << respawn_point.z << std::endl;
 			break;
 		}
 
@@ -1523,6 +1592,8 @@ void deletePointers()
 	delete player;
 	delete animation;
 	delete animator;
+	for (int i = 0; i < floorTiles.size(); i++)
+		floorTiles[i].deleteMesh();
 }
 
 /*=================================================================================================
@@ -1543,9 +1614,9 @@ void display_func( void )
 	else
 		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 
-	float currentFrame = glfwGetTime();
-	deltaTime = currentFrame - lastFrame;
-	lastFrame = currentFrame;
+	float currentFrameAnim = glfwGetTime();
+	deltaTime = currentFrameAnim - lastFrameAnim;
+	lastFrameAnim = currentFrameAnim;
 	//Pause animation while in mid-air
 	if(glfwGetTime() - jump_start < 0.3 || !jumping)
 		animator->UpdateAnimation(deltaTime);
@@ -1623,8 +1694,8 @@ void init( void )
 	animation = new Animation("models/player.glb", player, animationNum);
 	animator = new Animator(animation);
 
-	floorTiles.push_back(rectangularPrism(-15.5, -0.1, -15.5, 60, 2, 60));
-	floorTiles.push_back(rectangularPrism(-15.5, -0.1, 100.5, 60, 2, 60));
+	floorTiles.push_back(rectangularPrism(-15.5, -0.1, -15.5, 60, 2, 60, false, false));
+	floorTiles.push_back(rectangularPrism(-15.5, -0.1, 100.5, 60, 2, 60, true, false));
 
 	std::cout << "Finished initializing...\n\n";
 }
