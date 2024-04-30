@@ -45,6 +45,7 @@ GLuint IndexBufferID;
 GLuint tex[3];
 GLuint skybox;
 int texture_selected = 0;
+int tileScale = 60;
 
 //Camera
 glm::vec3 eye, direction;
@@ -416,12 +417,12 @@ public:
 	bool isFinish;
 
 	rectangularPrism(float x, float y, float z, float length, float width, float height, bool isCheckpoint, bool isFinish) {
-		this->x = x;
-		this->y = y;
-		this->z = z;
-		this->length = length;
+		this->x = x * tileScale - (tileScale / 2);
+		this->y = (y * tileScale)-0.1;
+		this->z = z * tileScale - (tileScale / 2);
+		this->length = length * tileScale;
 		this->width = width;
-		this->height = height;
+		this->height = height * tileScale;
 		this->isCheckpoint = isCheckpoint;
 		this->isFinish = isFinish;
 
@@ -1694,8 +1695,43 @@ void init( void )
 	animation = new Animation("models/player.glb", player, animationNum);
 	animator = new Animator(animation);
 
-	floorTiles.push_back(rectangularPrism(-15.5, -0.1, -15.5, 60, 2, 60, false, false));
-	floorTiles.push_back(rectangularPrism(-15.5, -0.1, 100.5, 60, 2, 60, true, false));
+	floorTiles.push_back(rectangularPrism(0, 0, 0, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(-2, 0, 0, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(-2, 0, -2, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(-4, 0.5, -2, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(-6, 1, -2, 1, 2, 1, true, false)); //Checkpoint 1
+	floorTiles.push_back(rectangularPrism(-8, 1.5, -1, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(-6, 2, 0, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(-5, 2.75, -1, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(-6, 3, -3, 1, 2, 1, true, false)); //Checkpoint 2
+	floorTiles.push_back(rectangularPrism(-4, 3.5, -4, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(-2, 3.5, -2, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(0, 4, -2, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(2, 4.25, -1, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(4, 5, 0, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(4, 6, 2, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(4, 1, 4, 1, 2, 1, true, false)); //Checkpoint 3 (Drop)
+	floorTiles.push_back(rectangularPrism(6, 1.5, 6, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(8, 2, 7, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(10, 2, 8, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(12, 2.5, 8, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(14, 3, 8, 1, 2, 1, false, false)); //Start of spiral
+	floorTiles.push_back(rectangularPrism(16, 3.5, 6, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(18, 4, 8, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(16, 4.5, 10, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(14, 5, 8, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(16, 5.5, 6, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(18, 6, 8, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(16, 6.5, 10, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(14, 7, 8, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(16, 7.5, 6, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(18, 8, 8, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(16, 8.5, 10, 1, 2, 1, false, false)); //End of spiral
+	floorTiles.push_back(rectangularPrism(16, 8.5, 12, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(16, 9, 14, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(16, 10, 16, 1, 2, 1, false, false));
+	floorTiles.push_back(rectangularPrism(16, 0, 21, 1, 2, 1, false, true)); //Final jump + end goal (Change 1st/3rd value to edit distance)
+
 
 	std::cout << "Finished initializing...\n\n";
 }
