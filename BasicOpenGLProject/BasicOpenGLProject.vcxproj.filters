@@ -73,6 +73,12 @@
     <None Include="shaders\skybox.vert">
       <Filter>shaders</Filter>
     </None>
+    <None Include="shaders\animation.frag">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\animation.vert">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\cobblestone.jpg">

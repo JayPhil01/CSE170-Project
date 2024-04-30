@@ -72,8 +72,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LibraryPath>C:\Users\James\Desktop\PA1_support_code\glfw-3.4.bin.WIN64\lib-vc2022;C:\Users\James\Desktop\PA1_support_code\Assimp\lib\x64;$(LibraryPath)</LibraryPath>
-    <IncludePath>C:\Users\James\Desktop\PA1_support_code\glfw-3.4.bin.WIN64\include;C:\Users\James\Desktop\PA1_support_code\Assimp\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\jamep\OneDrive\Desktop\PA1_support_code\glfw-3.4.bin.WIN64\lib-vc2022;C:\Users\jamep\OneDrive\Desktop\PA1_support_code\Assimp\lib\x64;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\jamep\OneDrive\Desktop\PA1_support_code\glfw-3.4.bin.WIN64\include;C:\Users\jamep\OneDrive\Desktop\PA1_support_code\Assimp\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -154,6 +154,8 @@
     <ClInclude Include="stb_image.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\animation.frag" />
+    <None Include="shaders\animation.vert" />
     <None Include="shaders\persp.frag" />
     <None Include="shaders\persp.vert" />
     <None Include="shaders\persplight.frag" />

@@ -1,7 +1,6 @@
 #version 400
 
 in vec4 vert_Pos;
-in vec4 vert_Color;
 in vec4 vert_Normal;
 in vec2 vert_TexCoord;
 
@@ -14,7 +13,7 @@ uniform mat4 modelMatrix;
 
 vec4 shade( vec4 color )
 {
-	vec4 la = vec4( 0.5, 0.5, 0.5, 1.0 );
+	vec4 la = vec4( 0.7, 0.7, 0.7, 1.0 );
 	vec4 ld = vec4( 0.7, 0.7, 0.7, 1.0 );
 	vec4 ls = vec4( 1.0, 1.0, 1.0, 1.0 );
 

@@ -1,25 +1,38 @@
 ﻿  main.cpp
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(424,23): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(424,23): warning C4244:         with
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(424,23): warning C4244:         [
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(424,23): warning C4244:             T=float
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(424,23): warning C4244:         ]
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(425,23): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(425,23): warning C4244:         with
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(425,23): warning C4244:         [
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(425,23): warning C4244:             T=float
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(425,23): warning C4244:         ]
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(426,23): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(426,23): warning C4244:         with
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(426,23): warning C4244:         [
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(426,23): warning C4244:             T=float
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(426,23): warning C4244:         ]
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(510,20): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(519,20): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
-C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\BasicOpenGLProject\main.cpp(743,38): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(338,16): warning C4305: '=': truncation from 'double' to 'float'
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(352,38): warning C4018: '<': signed/unsigned mismatch
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(426,29): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(770,20): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(781,20): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(792,20): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(933,25): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(934,31): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(958,44): warning C4244: 'return': conversion from 'int' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1000,21): warning C4018: '<': signed/unsigned mismatch
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1213,25): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1232,23): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1232,23): warning C4244:         with
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1232,23): warning C4244:         [
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1232,23): warning C4244:             T=float
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1232,23): warning C4244:         ]
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1233,23): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1233,23): warning C4244:         with
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1233,23): warning C4244:         [
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1233,23): warning C4244:             T=float
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1233,23): warning C4244:         ]
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1234,23): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1234,23): warning C4244:         with
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1234,23): warning C4244:         [
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1234,23): warning C4244:             T=float
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1234,23): warning C4244:         ]
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1381,28): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1440,27): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1456,21): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1501,21): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\BasicOpenGLProject\main.cpp(1703,26): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
   Generating code
-  1 of 859 functions ( 0.1%) were compiled, the rest were copied from previous compilation.
+  4 of 1603 functions ( 0.2%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    8 functions had inline decision re-evaluated but remain unchanged
+    9 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
-  BasicOpenGLProject.vcxproj -> C:\Users\James\Desktop\PA1_support_code\ProjectTest - Copy\x64\Release\OpenGLProject.exe
+  BasicOpenGLProject.vcxproj -> C:\Users\jamep\OneDrive\Desktop\PA1_support_code\ProjectTest\x64\Release\OpenGLProject.exe
